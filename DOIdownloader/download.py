@@ -119,7 +119,7 @@ def DownloadFileByUrl(DownloadUrl, FileTitle):
         FileName = re.sub(r'[\\/:*?"<>|#&]', '_', FileName)
 
         # Ensure the save path exists
-        save_path = "C:\\Users\\15143\\Desktop\\CheckMentor\\Downloads_files"
+        save_path = os.path.join(os.getcwd(), "Downloads_files")
         os.makedirs(save_path, exist_ok=True)
         FileName = os.path.join(save_path, FileName)
 
