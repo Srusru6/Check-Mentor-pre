@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Sci-Hub : {title} [{doi}]</title>
+        <meta charset = "UTF-8">
+        <meta name = "viewport" content = "width=device-width">
+    </head>
+    <body>
+
+        <style type = "text/css">
+
+            body {overflow: hidden; background-color: #eee;}
+            div {margin: 0; padding: 0}
+            embed {width: 99vw; min-height: 100vh; margin: 0; padding: 0;}
+
+        </style>
+
+        <div>
+            <embed type="application/pdf" src="//moscow.sci-hub.st/1854/17872ac4b0fa8c6e6b8c8dfdd12d0f41/anderson1972.pdf#navpanes=0&view=FitH" id = "pdf"></embed>
+        </div>
+    
+    </body>
+</html>
