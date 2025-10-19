@@ -30,7 +30,8 @@ pip install requests beautifulsoup4 python-Levenshtein
 ```text
 python download.py [--prod] [--doi DOI1,DOI2] [--depth N] [--workers K]
 									 [--young] [--young-depth D] [--young-keywords KW1,KW2]
-									 [--rps R] [--retries T] [--backoff B] [--timeout S]
+									   [--rps R] [--retries T] [--backoff B] [--timeout S]
+									   [--unpaywall-email you@domain] [--scihub-domains URL1,URL2]
 ```
 
 - --prod：开启生产模式（精简日志）。默认行为下已自动开启。
@@ -44,6 +45,8 @@ python download.py [--prod] [--doi DOI1,DOI2] [--depth N] [--workers K]
 - --retries：HTTP 重试次数（覆盖内置默认）。
 - --backoff：HTTP 重试退避因子（覆盖内置默认）。
 - --timeout：HTTP 请求超时时间（秒，覆盖内置默认）。
+- --unpaywall-email：用于调用 Unpaywall API 的联系邮箱（获取开放获取 PDF 的优先通道）。
+- --scihub-domains：自定义 Sci-Hub 镜像列表，逗号分隔，按顺序尝试（绕过被封锁的域名）。
 
 ### 示例
 
@@ -65,6 +68,12 @@ python download.py --doi 10.1038/s41586-024-00000-0 --depth 2 --workers 6 --youn
 python download.py --doi "10.1038/xxxx, 10.1126/yyyy" --depth 1 --workers 4
 ```
 
+4) 指定 Unpaywall 邮箱和自定义 Sci-Hub 镜像：
+
+```powershell
+python download.py --doi 10.1126/science.177.4047.393 --depth 0 --unpaywall-email you@domain.com --scihub-domains https://sci-hub.se,https://sci-hub.st,https://sci-hub.ru
+```
+
 ## 功能说明
 
 - 多来源解析：优先尝试出版社直链下载，失败则自动回退至 Sci-Hub；对 Sci-Hub 页面尝试解析出 PDF 直链。
@@ -72,6 +81,17 @@ python download.py --doi "10.1038/xxxx, 10.1126/yyyy" --depth 1 --workers 4
 - 并发与 BFS：按层并发下载，控制每层线程数；下载历史持久化，避免重复工作。
 - 标题校验：CrossRef 官方标题 + 页面标题，利用 Levenshtein 相似度做轻量验证。
 - 网络鲁棒性：全局 Session + 重试 + 限速 + 超时控制，CLI 可调。
+
+## 故障排查
+
+- 出版社 403/401：多数出版社需要校内网或机构访问（VPN/代理）。可尝试：
+	- 在校/图书馆 VPN 环境运行
+	- 启用 Unpaywall：`--unpaywall-email you@domain.com`（若该 DOI 有 OA 版本）
+	- 改用开放获取 DOI 测试，如 `10.48550/arXiv.1706.03762`
+- Sci-Hub 无法解析（DNS 失败）：本地网络可能屏蔽域名。可尝试：
+	- 指定可用镜像：`--scihub-domains https://sci-hub.se,https://sci-hub.st,https://sci-hub.ru`
+	- 更换网络/DNS，或使用 VPN
+- 仍未下载但无报错：默认生产模式日志精简。请去掉 `--prod` 以查看详细日志并反馈报错信息。
 
 ## 目录结构
 

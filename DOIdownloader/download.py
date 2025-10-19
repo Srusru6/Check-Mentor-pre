@@ -35,6 +35,10 @@ DEFAULT_HEADERS = {
 # Default networking knobs (overridable via CLI)
 REQUEST_TIMEOUT = 15
 
+# Optional integrations and runtime knobs
+UNPAYWALL_EMAIL: str | None = None
+SCIHUB_DOMAINS: list[str] | None = None
+
 # Simple global rate limiter (shared among threads)
 class RateLimiter:
     def __init__(self, rps: float):
@@ -487,11 +491,13 @@ def get_pdf_from_publisher(doi):
         return None
 
 # function: Download English-paper by DOI
-def GetDownloadUrl(doi):
-    base_urls = [
+def GetDownloadUrl(doi, scihub_domains: list[str] | None = None):
+    base_urls = scihub_domains or SCIHUB_DOMAINS or [
         "https://sci-hub.se",
         "https://sci-hub.st",
-        "https://sci-hub.ru"
+        "https://sci-hub.ru",
+        "https://sci-hub.wf",
+        "https://sci-hub.ee",
     ]
     for base_url in base_urls:
         url = f"{base_url}/{doi}"
@@ -535,6 +541,39 @@ def parse_scihub_pdf_url(html: str, base_url: str) -> str | None:
                 return requests.compat.urljoin(base_url, href)
     except Exception:
         return None
+    return None
+
+def get_pdf_from_unpaywall(doi: str, email: str | None) -> str | None:
+    """Try obtain OA PDF via Unpaywall API using a contact email.
+    Returns direct PDF URL if available, else None.
+    """
+    if not email:
+        return None
+    try:
+        api = f"https://api.unpaywall.org/v2/{requests.utils.quote(doi)}"
+        params = {"email": email}
+        r = http_get(api, params=params, headers={"Accept": "application/json", **DEFAULT_HEADERS}, timeout=REQUEST_TIMEOUT)
+        r.raise_for_status()
+        data = r.json()
+        # Prefer best_oa_location.url_for_pdf, fallback to any oa_locations
+        def pick(loc):
+            if not isinstance(loc, dict):
+                return None
+            return loc.get("url_for_pdf") or loc.get("url")
+        pdf = pick(data.get("best_oa_location"))
+        if pdf:
+            if not production_mode:
+                print(f"Unpaywall best OA PDF: {pdf}")
+            return pdf
+        for loc in data.get("oa_locations", []) or []:
+            pdf = pick(loc)
+            if pdf:
+                if not production_mode:
+                    print(f"Unpaywall OA PDF: {pdf}")
+                return pdf
+    except Exception as e:
+        if not production_mode:
+            print(f"Unpaywall lookup failed: {e}")
     return None
 
 def DownloadFileByUrl(DownloadUrl, FileTitle, subdirectory="main"):
@@ -622,16 +661,24 @@ def download_and_process_doi(doi, subdirectory="main"):
         print("\nStep 1: Trying to download directly from publisher (requires VPN for off-campus).")
     paperDownloadUrl = get_pdf_from_publisher(doi)
     
-    # Strategy B: Fallback to Sci-Hub if direct download fails
+    # Strategy B: Try Unpaywall (OA) if configured
     if not paperDownloadUrl:
         if not production_mode:
-            print("Step 2: Direct download failed. Falling back to Sci-Hub.")
+            print("Step 2: Trying Unpaywall for Open Access PDF...")
+        paperDownloadUrl = get_pdf_from_unpaywall(doi, UNPAYWALL_EMAIL)
+
+    # Strategy C: Fallback to Sci-Hub if above fails
+    if not paperDownloadUrl:
+        if not production_mode:
+            print("Step 3: Falling back to Sci-Hub (may require accessible mirror)...")
         try:
-            paperDownloadUrl = GetDownloadUrl(doi)
+            paperDownloadUrl = GetDownloadUrl(doi, scihub_domains=SCIHUB_DOMAINS)
         except ConnectionError as e:
             if not production_mode:
                 print(f"Could not get a download URL from any source for {doi}: {e}")
-            return [] # Stop processing this DOI
+                print("Proceeding with references only (no file).")
+            # 即便下载失败，也返回已解析的引用，允许继续递归
+            return references or []
 
     # 4. Download the file
     downloaded_file_path = DownloadFileByUrl(paperDownloadUrl, official_title, subdirectory)
@@ -651,7 +698,8 @@ def download_and_process_doi(doi, subdirectory="main"):
             except OSError as e:
                 if not production_mode:
                     print(f"Error deleting file: {e}")
-            return [] # Return empty list as download was invalid
+            # 标题校验失败也继续返回引用，允许递归到下一层
+            return references or []
         else:
             if not production_mode:
                 print("Verification successful. File has been kept.")
@@ -665,7 +713,8 @@ def download_and_process_doi(doi, subdirectory="main"):
             })
             return references
     
-    return [] # Return empty list if download failed
+    # 下载失败也返回引用，让递归继续
+    return references or []
 
 def download_with_references(initial_doi, depth=1):
     """
@@ -781,6 +830,8 @@ if __name__ == "__main__":
     parser.add_argument('--retries', type=int, default=None, help='Total HTTP retries (override default).')
     parser.add_argument('--backoff', type=float, default=None, help='HTTP retry backoff factor (override default).')
     parser.add_argument('--timeout', type=float, default=None, help='HTTP request timeout in seconds (override default).')
+    parser.add_argument('--unpaywall-email', type=str, default=None, help='Optional email for Unpaywall API to find OA PDFs.')
+    parser.add_argument('--scihub-domains', type=str, default=None, help='Comma-separated Sci-Hub base URLs to try in order.')
     args = parser.parse_args()
 
     if args.prod:
@@ -789,6 +840,13 @@ if __name__ == "__main__":
 
     # Configure HTTP knobs from CLI
     configure_http(retries=args.retries, backoff=args.backoff, timeout=args.timeout, rps=args.rps)
+
+    # Optional integrations
+    UNPAYWALL_EMAIL = args.unpaywall_email or None
+    if args.scihub_domains:
+        SCIHUB_DOMAINS = [u.strip() for u in args.scihub_domains.split(',') if u.strip()]
+    else:
+        SCIHUB_DOMAINS = None
 
     # If user provides --doi, run concurrent recursive downloader for those DOIs
     if args.doi:
