@@ -864,7 +864,7 @@ if __name__ == "__main__":
     else:
         # Default behavior: Production mode + download one DOI with depth=2 and young-author filter at depth 2
         production_mode = True
-        default_doi = '10.1126/science.177.4047.393'
+        default_doi = '10.1038/s41567-021-01333-w'
         print("\n=== Default: Download main + level-1 & level-2 references (young-author filter at level 2) ===")
         download_with_references_concurrent(default_doi, depth=2, max_workers=args.workers,
                                             young_filter=True, young_depth=2)
