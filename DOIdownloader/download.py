@@ -9,6 +9,7 @@ from urllib3.util.retry import Retry
 from functools import lru_cache
 from urllib.parse import unquote
 import json
+import shutil
 import time
 import threading
 from datetime import datetime
@@ -760,7 +761,8 @@ def download_with_references(initial_doi, depth=1):
 
 def download_with_references_concurrent(initial_doi: str, depth: int = 1, max_workers: int = 4,
                                         young_filter: bool = False, young_depth: int = 2,
-                                        young_keywords: list[str] | None = None):
+                                        young_keywords: list[str] | None = None,
+                                        copy_ref1_young_to_ref2: bool = True):
     """
     Concurrent BFS download: per depth level, download all DOIs concurrently, then expand to next level.
     """
@@ -789,6 +791,28 @@ def download_with_references_concurrent(initial_doi: str, depth: int = 1, max_wo
                 try:
                     refs = fut.result() or []
                     processed_dois.add(doi)
+                    # 新增：默认将 ref1 层中判定为“年轻作者”的文章复制一份到 ref2 目录，便于集中查看。
+                    if copy_ref1_young_to_ref2 and d == 1:
+                        try:
+                            if paper_has_young_author(doi, young_keywords):
+                                # 从历史中找到已下载文件路径
+                                hist = history_get(doi) or {}
+                                src_path = hist.get('path')
+                                if src_path and os.path.exists(src_path):
+                                    # 目标目录为 ref2
+                                    target_dir = os.path.join(os.getcwd(), "Downloads_pdf", "sample", f"ref{d+1}")
+                                    os.makedirs(target_dir, exist_ok=True)
+                                    dst_path = os.path.join(target_dir, os.path.basename(src_path))
+                                    if not os.path.exists(dst_path):
+                                        shutil.copy2(src_path, dst_path)
+                                        if not production_mode:
+                                            print(f"Copied young-author paper from ref1 to ref2: {os.path.basename(dst_path)}")
+                                else:
+                                    if not production_mode:
+                                        print(f"Skip copying (file not found for DOI): {doi}")
+                        except Exception as e:
+                            if not production_mode:
+                                print(f"Copy-to-ref2 failed for {doi}: {e}")
                     # 规范化引用DOI并去重
                     for r in refs:
                         r_norm = normalize_doi(r)
@@ -826,6 +850,9 @@ if __name__ == "__main__":
     parser.add_argument('--young', action='store_true', help='Enable filtering for young authors at a target depth (default depth=2).')
     parser.add_argument('--young-depth', type=int, default=2, help='Depth at which to apply young-author filtering (default 2).')
     parser.add_argument('--young-keywords', type=str, default=None, help='Comma-separated keywords to detect young authors in affiliations.')
+    # 默认启用将 ref1 的年轻作者文章复制到 ref2，可用该开关禁用
+    parser.add_argument('--no-copy-ref1-young-to-ref2', dest='copy_ref1_young_to_ref2', action='store_false',
+                        help='Disable copying young-author papers from ref1 to ref2 (enabled by default).')
     parser.add_argument('--rps', type=float, default=0.0, help='Global rate limit (requests per second). 0 = unlimited.')
     parser.add_argument('--retries', type=int, default=None, help='Total HTTP retries (override default).')
     parser.add_argument('--backoff', type=float, default=None, help='HTTP retry backoff factor (override default).')
@@ -859,13 +886,15 @@ if __name__ == "__main__":
             print(f"\n--- Target {i}/{len(dois)}: {d} ---")
             download_with_references_concurrent(d, depth=args.depth, max_workers=args.workers,
                                                 young_filter=args.young, young_depth=args.young_depth,
-                                                young_keywords=yk)
+                                                young_keywords=yk,
+                                                copy_ref1_young_to_ref2=getattr(args, 'copy_ref1_young_to_ref2', True))
         print("\n--- All requested DOI tasks completed. ---")
     else:
         # Default behavior: Production mode + download one DOI with depth=2 and young-author filter at depth 2
         production_mode = True
-        default_doi = '10.1038/s41567-021-01333-w'
+        default_doi = '10.1038/nphys4074'
         print("\n=== Default: Download main + level-1 & level-2 references (young-author filter at level 2) ===")
         download_with_references_concurrent(default_doi, depth=2, max_workers=args.workers,
-                                            young_filter=True, young_depth=2)
+                                            young_filter=True, young_depth=2,
+                                            copy_ref1_young_to_ref2=True)
         print("\n--- Task completed. ---")

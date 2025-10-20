@@ -2,6 +2,8 @@
 
 一个可配置的 DOI 学术论文下载器：支持下载原文、递归下载一二级引用，第二层可筛选“年轻作者”文章；带并发、重试、限速、持久化历史与命令行参数。
 
+提示：当启用“年轻作者”筛选时，`ref1` 层中被判定为“年轻作者”的文章会默认复制一份到 `ref2` 目录，便于集中查看。可用 `--no-copy-ref1-young-to-ref2` 关闭此行为。
+
 ## 默认行为（开箱即用）
 
 不带任何参数直接运行脚本时：
@@ -30,8 +32,9 @@ pip install requests beautifulsoup4 python-Levenshtein
 ```text
 python download.py [--prod] [--doi DOI1,DOI2] [--depth N] [--workers K]
 									 [--young] [--young-depth D] [--young-keywords KW1,KW2]
-									   [--rps R] [--retries T] [--backoff B] [--timeout S]
+							   [--rps R] [--retries T] [--backoff B] [--timeout S]
 									   [--unpaywall-email you@domain] [--scihub-domains URL1,URL2]
+							   [--no-copy-ref1-young-to-ref2]
 ```
 
 - --prod：开启生产模式（精简日志）。默认行为下已自动开启。
@@ -41,6 +44,7 @@ python download.py [--prod] [--doi DOI1,DOI2] [--depth N] [--workers K]
 - --young：启用“年轻作者”筛选（基于作者单位关键词）。
 - --young-depth：在哪一层应用年轻作者筛选，默认 2。
 - --young-keywords：自定义判定“年轻/学生”作者的单位关键词，逗号分隔（默认内置常见词，如 student、undergraduate、bachelor 等）。
+- --no-copy-ref1-young-to-ref2：关闭“将 ref1 层年轻作者文章复制到 ref2 目录”的默认行为。
 - --rps：全局限速（每秒请求数），0 表示不限制。
 - --retries：HTTP 重试次数（覆盖内置默认）。
 - --backoff：HTTP 重试退避因子（覆盖内置默认）。
@@ -100,7 +104,7 @@ Downloads_pdf/
 	sample/
 		main/   # 原文
 		ref1/   # 一级引用
-		ref2/   # 二级引用（可筛选）
+	ref2/   # 二级引用（可筛选）；若开启年轻作者筛选，这里也会汇总一份来自 ref1 的“年轻作者”副本
 ```
 
 ## 注意事项与建议
