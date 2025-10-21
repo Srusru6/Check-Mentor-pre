@@ -18,6 +18,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Global flag for production mode
 production_mode = False
 
+# Max pages threshold for downloading (configurable via CLI)
+MAX_PAGES = 30
+
 # Global HTTP session with retries
 session = requests.Session()
 retry_strategy = Retry(
@@ -255,6 +258,41 @@ def get_crossref_metadata(doi: str) -> dict | None:
         return resp.json().get('message', {})
     except Exception:
         return None
+
+def estimate_page_count_from_metadata(meta: dict | None) -> int | None:
+    """Estimate page count from Crossref metadata.
+    Prefer 'number-of-pages' if present, otherwise parse 'page' range like 'S12-34' or '1–15'.
+    Returns None if not determinable.
+    """
+    if not meta or not isinstance(meta, dict):
+        return None
+    # Direct field if provided by Crossref
+    n = meta.get('number-of-pages') or meta.get('number_of_pages')
+    try:
+        if isinstance(n, int):
+            return n if n > 0 else None
+        if isinstance(n, str) and n.strip().isdigit():
+            v = int(n.strip())
+            return v if v > 0 else None
+    except Exception:
+        pass
+    # Parse 'page' string like '123-145', 'S5–S20', '1 — 32'
+    page_str = meta.get('page')
+    if isinstance(page_str, str) and page_str.strip():
+        # Extract numeric tokens and compute last - first + 1 when feasible
+        nums = [int(x) for x in re.findall(r"(\d+)", page_str)]
+        if len(nums) >= 2:
+            try:
+                start = nums[0]
+                end = nums[-1]
+                if end >= start:
+                    pages = end - start + 1
+                    # Defensive bounds: ignore absurdly large results from bad parsing
+                    if 1 <= pages <= 5000:
+                        return pages
+            except Exception:
+                return None
+    return None
 
 DEFAULT_YOUNG_KEYWORDS = [
     'student', 'phd', 'doctoral', 'candidate', 'undergraduate', 'master',
@@ -685,6 +723,19 @@ def download_and_process_doi(doi, subdirectory="main", teacher: str | None = Non
     # 2. Get the title from the source page (this will be used for verification)
     page_title, references = GetTitleFromDOI(doi)
     
+    # 2.5 Page limit check using Crossref metadata
+    try:
+        meta = get_crossref_metadata(doi)
+        page_count = estimate_page_count_from_metadata(meta)
+        if page_count is not None and page_count > MAX_PAGES:
+            if not production_mode:
+                print(f"Skip download: page count {page_count} exceeds limit {MAX_PAGES}. DOI: {doi}")
+            # 不下载，且不再迭代引用
+            return []
+    except Exception as e:
+        if not production_mode:
+            print(f"Page count check failed (ignored): {e}")
+    
     # Use the official title for the filename for consistency
     if not production_mode:
         print(f"Using official title for filename: '{official_title}'")
@@ -698,6 +749,18 @@ def download_and_process_doi(doi, subdirectory="main", teacher: str | None = Non
         # 若需要按老师分类且历史文件不在该老师目录，复制到目标老师目录
         try:
             if teacher:
+                # 在复制之前进行页数检查，避免复制超过阈值的已缓存论文
+                try:
+                    meta = get_crossref_metadata(doi)
+                    page_count = estimate_page_count_from_metadata(meta)
+                    if page_count is not None and page_count > MAX_PAGES:
+                        if not production_mode:
+                            print(f"Skip copying cached PDF: page count {page_count} exceeds limit {MAX_PAGES}. DOI: {doi}")
+                        # 不复制，且不再迭代引用
+                        return []
+                except Exception as e:
+                    if not production_mode:
+                        print(f"Page count check (cache copy) failed (ignored): {e}")
                 folder_teacher = sanitize_folder_name(teacher)
                 # 目标目录
                 target_dir = os.path.join(OUTPUT_ROOT_PDF, folder_teacher, subdirectory)
@@ -964,6 +1027,7 @@ if __name__ == "__main__":
                         help='Read DOIs from results.txt and download into per-teacher folders. Optional custom path.')
     parser.add_argument('--pdf-root', type=str, default=None, help='Base output folder for PDFs (default ./Downloads_pdf).')
     parser.add_argument('--save-only-depth', type=int, default=None, help='Only save PDFs for this depth (0=main,1=ref1,2=ref2,...)')
+    parser.add_argument('--max-pages', type=int, default=30, help='Maximum page count to download; skip if exceeded (default 30).')
     args = parser.parse_args()
 
     if args.prod:
@@ -977,6 +1041,12 @@ if __name__ == "__main__":
     configure_outputs(args.pdf_root)
     # Restrict saving to a specific depth, if requested
     SAVE_ONLY_DEPTH = args.save_only_depth
+    # Page count threshold
+    try:
+        if isinstance(args.max_pages, int) and args.max_pages > 0:
+            MAX_PAGES = args.max_pages
+    except Exception:
+        pass
 
     # Optional integrations
     UNPAYWALL_EMAIL = args.unpaywall_email or None
