@@ -22,7 +22,7 @@ results.txt
 		老师名字/
 			main/   # 原文
 			ref1/   # 一级引用
-			ref2/   # 二级引用（筛选年轻作者）
+			ref2/   # 一二级引用中的筛选年轻作者文章
 
 ### pdf转markdown
 
@@ -36,4 +36,4 @@ Downloads_pdf
 		老师名字/
 			main/   # 原文
 			ref1/   # 一级引用
-			ref2/   # 二级引用（筛选年轻作者）
+			ref2/   # 一二级引用中的筛选年轻作者文章
