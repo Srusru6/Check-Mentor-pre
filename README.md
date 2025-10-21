@@ -14,7 +14,8 @@ doi.xlsx
 
 输入：
 
-doi.xlsx
+- 支持从 results.txt 自动读取（推荐）
+- 或从 doi.xlsx/命令行参数提供
 
 输出格式：
 
