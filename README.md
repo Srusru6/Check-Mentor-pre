@@ -8,14 +8,13 @@ Check Mentor
 
 输出：
 
-doi.xlsx
+results.txt
 
 ### doi 到 pdf 下载工序
 
 输入：
 
-- 支持从 results.txt 自动读取（推荐）
-- 或从 doi.xlsx/命令行参数提供
+从 results.txt 自动读取（推荐）
 
 输出格式：
 
