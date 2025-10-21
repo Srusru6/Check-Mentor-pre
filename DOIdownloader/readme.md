@@ -33,12 +33,16 @@ pip install requests beautifulsoup4 python-Levenshtein
 python download.py [--prod] [--doi DOI1,DOI2] [--depth N] [--workers K]
 									 [--young] [--young-depth D] [--young-keywords KW1,KW2]
 							   [--rps R] [--retries T] [--backoff B] [--timeout S]
-									   [--unpaywall-email you@domain] [--scihub-domains URL1,URL2]
+					   [--unpaywall-email you@domain] [--scihub-domains URL1,URL2]
+			   [--from-results [PATH]] [--teacher NAME] [--pdf-root PATH]
 							   [--no-copy-ref1-young-to-ref2]
 ```
 
 - --prod：开启生产模式（精简日志）。默认行为下已自动开启。
 - --doi：一个或多个 DOI（逗号或空格分隔）。若不提供，将运行默认示例 DOI。
+- --from-results：从 results.txt 读取 DOI 并按“老师名/main|ref1|ref2”目录保存；可选自定义路径，不传或传 `AUTO` 时默认读取脚本同目录下 `results.txt`。当未提供 `--doi` 时，默认启用该模式。
+- --teacher：当使用 `--doi` 直接指定 DOI 时，把输出放到该老师名目录下（默认 `sample`）。
+- --pdf-root：PDF 输出根目录，默认 `./Downloads_pdf`。
 - --depth：引用递归深度（>=0）。例如 2 表示原文+一级+二级引用。
 - --workers：每一层的并发下载线程数。
 - --young：启用“年轻作者”筛选（基于作者单位关键词）。
@@ -73,6 +77,14 @@ python download.py --doi "10.1038/xxxx, 10.1126/yyyy" --depth 1 --workers 4
 ```
 
 4) 指定 Unpaywall 邮箱和自定义 Sci-Hub 镜像：
+5) 从 results.txt 批量下载，按老师分目录保存（推荐）：
+
+```powershell
+python download.py --depth 1 --workers 4 --prod
+# 或自定义 results.txt 路径与输出根目录
+python download.py --from-results d:\\programs\\checkmentor\\Check-Mentor\\DOIdownloader\\results.txt --pdf-root d:\\data\\Downloads_pdf --depth 2 --workers 6 --prod
+```
+
 
 ```powershell
 python download.py --doi 10.1126/science.177.4047.393 --depth 0 --unpaywall-email you@domain.com --scihub-domains https://sci-hub.se,https://sci-hub.st,https://sci-hub.ru
@@ -101,10 +113,10 @@ python download.py --doi 10.1126/science.177.4047.393 --depth 0 --unpaywall-emai
 
 ```
 Downloads_pdf/
-	sample/
+	老师名字/
 		main/   # 原文
 		ref1/   # 一级引用
-	ref2/   # 二级引用（可筛选）；若开启年轻作者筛选，这里也会汇总一份来自 ref1 的“年轻作者”副本
+		ref2/   # 二级引用（可筛选）；若开启年轻作者筛选，这里也会汇总一份来自 ref1 的“年轻作者”副本
 ```
 
 ## 注意事项与建议
