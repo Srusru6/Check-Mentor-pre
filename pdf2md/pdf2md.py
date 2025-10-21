@@ -6,17 +6,40 @@ import time
 import zipfile
 import tempfile
 import shutil
+import json
+from collections import defaultdict
 
 
-file_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Downloads_pdf")
-file_path = [str(p) for p in Path(file_dir).rglob("*.pdf")]
-output_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Downloads_md")
+file_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Downloads_pdf", "王剑威")
+output_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Downloads_md", "王剑威")
 
 token = "eyJ0eXBlIjoiSldUIiwiYWxnIjoiSFM1MTIifQ.eyJqdGkiOiIwMzA2OTgiLCJyb2wiOiJST0xFX1JFR0lTVEVSLFJPTEVfREFUQVNFVCIsImlzcyI6Ik9wZW5YTGFiIiwiaWF0IjoxNzM2NDc2NTM0LCJjbGllbnRJZCI6IjRtMndvbmVta3Yycm0zN253ZW44IiwicGhvbmUiOiIiLCJ1dWlkIjoiOGFmYmY3YzUtYzQ4NS00ODg5LWFlZjQtZDczZDM5ZmZmZGRjIiwiZW1haWwiOiJPcGVuRGF0YUxhYkBwamxhYi5vcmcuY24iLCJleHAiOjE4OTQxNTY1MzR9.zsobQWe9Wn5XpWdVrBUdZOVfkWLSXOiWUfwUtgnUuqcrY5BUsgtsgsFhKNd8en79Ho_2QzxNySYYHuSrEiRGFQ"
 header = {
     "Content-Type": "application/json",
     "Authorization": f"Bearer {token}"
 }
+
+def new_files():
+    converted = [p.stem for p in Path(output_dir).rglob("*.md")]
+    new_files = [p for p in Path(file_dir).rglob("*.pdf") if p.stem not in converted]
+    unique_dict = defaultdict(list)
+    for p in new_files:
+        unique_dict[p.stem].append(str(p.relative_to(Path(file_dir))))
+    return unique_dict
+
+def files():
+    all_files = [p for p in Path(file_dir).rglob("*.pdf")]
+    unique_dict = defaultdict(list)
+    for p in all_files:
+        unique_dict[p.stem].append(str(p.relative_to(Path(file_dir))))
+    return unique_dict
+
+unique_dict = new_files()
+with open("task.json", "w", encoding="utf-8") as file:
+    json.dump(dict(unique_dict), file, ensure_ascii=False, indent=4)
+file_names = list(dict(unique_dict).keys())[:199]
+print(len(file_names))
+
 def batch_upload():
     url = "https://mineru.org.cn/api/v4/file-urls/batch"
     data = {
@@ -28,13 +51,13 @@ def batch_upload():
         "is_chem": False,
         "files": [
             {
-                "name": str(Path(file).relative_to(Path(file_dir))),
+                "name": f"{filename}.pdf",
                 "data_id": str(uuid.uuid4())
             }
-            for file in file_path
+            for filename in file_names
         ]
     }
-
+    
     try:
         response = requests.post(url,headers=header,json=data)
         if response.status_code == 200:
@@ -45,7 +68,7 @@ def batch_upload():
                 urls = result["data"]["file_urls"]
                 print('batch_id:{},urls:{}'.format(batch_id, urls))
                 for i in range(0, len(urls)):
-                    with open(file_path[i], 'rb') as f:
+                    with open(Path(file_dir) / Path(unique_dict[file_names[i]][0]), 'rb') as f:
                         res_upload = requests.put(urls[i], data=f)
                         if res_upload.status_code == 200:
                             print(f"{urls[i]} upload success")
@@ -60,6 +83,8 @@ def batch_upload():
         print(err)
 
 def batch_retrieve(batch_id):
+    max_retry = 180
+    retry = 0
     done = False
     done_files = set([])
     url = f"https://mineru.org.cn/api/v4/extract-results/batch/{batch_id}"
@@ -67,9 +92,11 @@ def batch_retrieve(batch_id):
     while not done:
         res = requests.get(url, headers=header)
         result = res.json()["data"]["extract_result"]
+        if retry > max_retry:
+            print([file for file in result if file["state"] != "done"])
         if all(file["state"] == "done" for file in result):
             done = True
-            print("all files done")
+            print(f"{len(result)} all files done")
         for item in result:
             file = Path(item["file_name"]).with_suffix(".zip")
             if str(file) not in done_files and item["state"] == "done":
@@ -77,13 +104,18 @@ def batch_retrieve(batch_id):
                 zip_url = item["full_zip_url"]
                 response = requests.get(zip_url, stream=True)
                 response.raise_for_status()
-                file_path = Path(output_dir) / file
+                path = unique_dict[Path(item["file_name"]).stem][0]
+                file_path = Path(output_dir) / Path(path).with_suffix(".zip")
                 file_path.parent.mkdir(parents=True, exist_ok=True)
                 with open(file_path, 'wb') as f:
                     for chunk in response.iter_content(chunk_size=8192):
                         f.write(chunk)
                 print(f"文件已下载并保存至: {file_path}")
-        time.sleep(1)
+        print("new query...")
+        time.sleep(2)
+        retry += 1
+        
+        
 
 def process_zip_file(zip_path: Path):
     parent_dir = zip_path.parent
@@ -140,3 +172,50 @@ print(batch_id)
 batch_retrieve(batch_id)
 
 process_all_zips(Path(output_dir))
+
+
+def replicate_files(file_dict: dict):
+    for title, paths in file_dict.items():
+        path_objects = [Path(output_dir) / Path(p).with_suffix(".md") for p in paths]
+        
+        # 查找哪个文件真实存在
+        existing_file = None
+        for p in path_objects:
+            if p.exists():
+                existing_file = p
+                break
+        
+        if existing_file is None:
+            print(f"⚠️ 未找到 '{title}' 的任何源文件！")
+            continue
+
+        print(f"✅ 源文件: {existing_file}")
+        
+        # 创建父目录（如果不存在），并将源文件复制到所有目标路径
+        for target_path in path_objects:
+            if target_path == existing_file:
+                continue  # 跳过已存在的源文件
+            
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(existing_file, target_path)
+            print(f"   🔖 复制到: {target_path}")
+
+replicate_files(files())
+
+"""
+def check():
+    files = [p for p in Path(file_dir).rglob("*.pdf")]
+    file_dict = {}
+    for item in files:
+        if item.stem not in file_dict:
+            file_dict[item.stem] = []
+        file_dict[item.stem].append(str(item.relative_to(Path(file_dir))))
+    same = {}
+    for key, value in file_dict.items():
+        if len(value) > 1:
+            same[key] = value
+    print(len(same.keys()))
+    with open("result.json", mode='w', encoding="utf-8") as file:
+        json.dump(same, file, ensure_ascii=False, indent=4)
+check()
+"""
