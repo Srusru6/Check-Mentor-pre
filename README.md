@@ -8,14 +8,13 @@ Check Mentor
 
 输出：
 
-doi.xlsx
+results.txt
 
 ### doi 到 pdf 下载工序
 
 输入：
 
-- 支持从 results.txt 自动读取（推荐）
-- 或从 doi.xlsx/命令行参数提供
+从 results.txt 自动读取（推荐）
 
 输出格式：
 
@@ -23,7 +22,7 @@ doi.xlsx
 		老师名字/
 			main/   # 原文
 			ref1/   # 一级引用
-			ref2/   # 二级引用（筛选年轻作者）
+			ref2/   # 一二级引用中的筛选年轻作者文章
 
 ### pdf转markdown
 
@@ -37,4 +36,4 @@ Downloads_pdf
 		老师名字/
 			main/   # 原文
 			ref1/   # 一级引用
-			ref2/   # 二级引用（筛选年轻作者）
+			ref2/   # 一二级引用中的筛选年轻作者文章
