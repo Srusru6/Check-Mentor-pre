@@ -1,0 +1,199 @@
+This copy is for your personal, non-commercial use only.
+
+If you wish to distribute this article to others, you can order high-quality copies for your colleagues, clients, or customers by clicking here.
+
+Permission to republish or repurpose articles or portions of articles can be obtained by following the guidelines here.
+
+The following resources related to this article are available online at www.sciencemag.org (this information is current as of February 17, 2013):
+
+Updated information and services, including high-resolution figures, can be found in the online version of this article at: http://www.sciencemag.org/content/318/5851/766.full.html
+
+Supporting Online Material can be found at: http://www.sciencemag.org/content/suppl/2007/11/01/318.5851.766.DC1.html
+
+A list of selected additional articles on the Science Web sites related to this article can be found at: http://www.sciencemag.org/content/318/5851/766.full.html#related
+
+This article cites 20 articles, 3 of which can be accessed free: http://www.sciencemag.org/content/318/5851/766.full.html#ref-list-1
+
+This article has been cited by 148 article(s) on the ISI Web of Science
+
+This article has been cited by 14 articles hosted by HighWire Press; see: http://www.sciencemag.org/content/318/5851/766.full.html#related-urls
+
+This article appears in the following subject collections: Physics, Applied http://www.sciencemag.org/cgi/collection/app_physics
+
+# Quantum Spin Hall Insulator State in HgTe Quantum Wells
+
+Markus König, $^{1}$  Steffen Wiedmann, $^{1}$  Christoph Brüne, $^{1}$  Andreas Roth, $^{1}$  Hartmut Buhmann, $^{1}$  Laurens W. Molenkamp, $^{1*}$  Xiao-Liang Qi, $^{2}$  Shou-Cheng Zhang $^{2}$
+
+# AUTHORS' SUMMARY
+
+The discovery more than 25 years ago of the quantum Hall effect (1), in which the "Hall," or "transverse electrical" conductance of a material is quantized, came as a total surprise to the physics community. This effect occurs in layered metals at high magnetic fields and results from the formation of conducting one-dimensional channels that develop at the edges of the sample. Each of these edge channels, in which the current moves only in one direction, exhibits a quantized conductance that is characteristic of one-dimensional transport. The number of edge channels in the sample is directly related to the value of the quantum Hall conductance. Moreover, the charge carriers in these channels are very resistant to scattering.
+
+![](images/1c3aa28783fcf8b9a21f9ca2c677300d575bcbe2f72f874ab8f1621af8ab3fa1.jpg)  
+Schematic of the spin-polarized edge channels in a quantum spin Hall insulator.
+
+theoretically that the electronic structure of inverted HgTe quantum wells exhibits the properties that should enable an observation of the quantum spin Hall insulator state. Our experimental observations confirm this.
+
+These experiments only became possible after the development of quantum wells of sufficiently high carrier mobility, combined with the lithographic techniques needed to pattern the sample. The patterning is especially difficult because of the very high volatility of Hg. Moreover, we have developed a special low-deposition temperature Si-O-N gate insulator (7), which allows us to control the Fermi level (the energy level up to which all
+
+Not only can the quantum Hall effect be observed in macroscopic samples for this reason, but within the channels, charge carriers can be transported without energy dissipation. Therefore, quantum Hall edge channels may be useful for applications in integrated circuit technology, where power dissipation is becoming more and more of a problem as devices become smaller. Of course, there are some formidable obstacles to overcome—the quantum Hall effect only occurs at low temperatures and high magnetic fields.
+
+In the past few years, theoretical physicists have suggested that edge channel transport of current might be possible in the absence of a magnetic field. They predicted (2-4) that in insulators with suitable electronic structure, edge states would develop where—and this is different from the quantum Hall effect—the carriers with opposite spins move in opposite directions on a given edge, as shown schematically in the figure. This is the quantum spin Hall effect, and its observation has been hotly pursued in the field.
+
+Although there are many insulators in nature, most of them do not have the right structural properties to allow the quantum spin Hall effect to be observed. This is where HgTe comes in. Bulk HgTe is a II-VI semiconductor, but has a peculiar electronic structure: In most such materials, the conduction band usually derives from s-states located on the group II atoms, and the valence band from p-states at the VI atoms. In HgTe this order is inverted, however (5). Using molecular beam epitaxy, we can grow thin HgTe quantum wells, sandwiched between  $(\mathrm{Hg},\mathrm{Cd})\mathrm{Te}$  barriers, that offer a unique way to tune the electronic structure of the material: When the quantum well is wide, the electronic structure in the well remains inverted. However, for narrow wells, it is possible to obtain a "normal" alignment of the quantum well states. Recently, Bernevig et al. (6) predicted
+
+electronics states are filled) in the quantum well from the conduction band, through the insulating gap, and into the valence band. Using both electron beam and optical lithography, we have fabricated simple rectangular structures in various sizes from quantum wells of varying width and measured the conductance as a function of gate voltage.
+
+We observe that samples made from narrow quantum wells with a "normal" electronic structure basically show zero conductance when the Fermi level is inside the gap. Quantum wells with an inverted electronic structure, by contrast, show a conductance close to what is expected for the edge channel transport in a quantum spin Hall insulator. This interpretation is further corroborated by magnetoresistance data. For example, high-magnetic field data on samples with an inverted electronic structure show a very unusual insulator-metal-insulator transition as a function of field, which we demonstrate is a direct consequence of the electronic structure.
+
+The spin-polarized character of the edge channels still needs to be unequivocably demonstrated. For applications of the effect in actual microelectronic technology, this low-temperature effect (we observe it below  $10\mathrm{K}$ ) will have to be demonstrated at room temperature, which may be possible in wells with wider gaps.
+
+# Summary References
+
+1. K. v. Klitzing, G. Dorda, M. Pepper, Phys. Rev. Lett. 45, 494 (1980).  
+2. S. Murakami, N. Nagaosa, S.-C. Zhang, Phys. Rev. Lett. 93, 156804 (2004).  
+3. C. L. Kane, E. J. Mele, Phys. Rev. Lett. 95, 146802 (2005).  
+4. B. A. Bernevig, S.-C. Zhang, Phys. Rev. Lett. 96, 106802 (2006).  
+5. A. Novik et al., Phys. Rev. B 72, 035321 (2005).  
+6. B. A. Bernevig, T. L. Hughes, S.-C. Zhang, Science 314, 1757 (2006).  
+7. J. Hinz et al., Semicond. Sci. Technol. 21, 501 (2006).
+
+# FULL-LENGTH ARTICLE
+
+Recent theory predicted that the quantum spin Hall effect, a fundamentally new quantum state of matter that exists at zero external magnetic field, may be realized in  $\mathrm{HgTe / (Hg,Cd)Te}$  quantum wells. We fabricated such sample structures with low density and high mobility in which we could tune, through an external gate voltage, the carrier conduction from n-type to p-type, passing through an insulating regime. For thin quantum wells with well width  $d < 6.3$  nanometers, the insulating regime showed the conventional behavior of vanishingly small conductance at low temperature. However, for thicker quantum wells ( $d > 6.3$  nanometers), the nominally insulating regime showed a plateau of residual conductance close to  $2e^{2} / h$ , where  $e$  is the electron charge and  $h$  is Planck's constant. The residual conductance was independent of the sample width, indicating that it is caused by edge states. Furthermore, the residual conductance was destroyed by a small external magnetic field. The quantum phase transition at the critical thickness,  $d = 6.3$  nanometers, was also independently determined from the magnetic field-induced insulator-to-metal transition. These observations provide experimental evidence of the quantum spin Hall effect.
+
+The theoretical prediction of the intrinsic spin Hall effect in metals and insulators (1-3) has generated great interest in the field of spintronics, because this effect allows direct electric manipulation of the spin degrees of freedom without a magnetic field, and the resulting spin current can flow without dissipation. These properties could lead to promising spintronic devices with low power dissipation.
+
+However, beyond the potential technological applications, the intrinsic spin Hall effect has guided us in the search for new and topologically nontrivial states of matter. The quantum Hall state is the first, and so far the only example, of a topologically nontrivial state of matter, where the quantization of the Hall conductance is protected by a topological invariant. The quantum spin Hall (QSH) insulators (4-6) have a similar, but distinct, nontrivial topological property. The QSH insulators are invariant under time reversal, have a charge excitation gap in the bulk, but have topologically protected gapless edge states that lie inside the bulk insulating gap. This type of insulator is typically realized in spin-orbit coupled systems; the corresponding edge states have a distinct helical property: two states with opposite spin-polarization counterpropagate at a given edge (4, 7, 8). The edge states come in Kramers' doublets, and time-reversal symmetry ensures the crossing of their energy levels at special points in the Brillouin zone. Because of this energy-level crossing, the spectrum of a QSH insulator cannot be adiabatically deformed into that of a topologically trivial insulator without helical edge states; therefore, in this precise sense, the QSH insulators represent a topologically distinct new state of matter.
+
+Theoretical background. It has been proposed theoretically that  $\mathrm{HgTe / (Hg,Cd)Te}$  quantum wells (QWs) provide a natural re
+
+alization of the quantum spin Hall effect (6). In zincblende-type semiconductor QWs, there are four relevant bands close to the Fermi level. The  $E1$  band consists of the two spin states of the s orbital, whereas the HH1 band consists of the  $|\mathfrak{p}_x + \mathrm{i}\mathfrak{p}_y,\uparrow \rangle$  and  $|-(\mathfrak{p}_x - \mathfrak{p}_y),\downarrow \rangle$  orbitals. The effective Hamiltonian near the  $\Gamma$  point, the center of the Brillouin zone, is given by
+
+$$
+H _ {\mathrm {e f f}} (k _ {x}, k _ {y}) = \left( \begin{array}{c c} H (k) & 0 \\ 0 & H ^ {*} (- k) \end{array} \right),
+$$
+
+$$
+H = \varepsilon (k) + d _ {i} (k) \sigma_ {i} \tag {1}
+$$
+
+where  $\sigma_{i}$  are the Pauli matrices, and
+
+$$
+d _ {1} + i d _ {2} = A \left(k _ {x} + i k _ {y}\right) \equiv A k _ {+}
+$$
+
+$$
+d _ {3} = M - B \left(k _ {x} ^ {2} + k _ {y} ^ {2}\right),
+$$
+
+$$
+\varepsilon_ {k} = C - D \left(k _ {x} ^ {2} + k _ {y} ^ {2}\right). \tag {2}
+$$
+
+Here,  $k_{x}$  and  $k_{y}$  are momenta in the plane of the two-dimensional electron gas (2DEG), and  $A$ ,  $B$ ,  $C$ , and  $D$  are material specific constants. Spin-orbit coupling is naturally built-in in this Hamiltonian through the spin-orbit coupled p orbitals  $|\mathfrak{p}_x + i\mathfrak{p}_y\rangle$  and  $|-(\mathfrak{p}_x - i\mathfrak{p}_y)\rangle$ . Two-dimensional materials can be grouped into three types according to the sign of the Dirac mass parameter  $M$ . In conventional semiconductors such as GaAs and CdTe, the s-like E1 band lies above the p-like HH1 band, and the mass parameter  $M$  is positive. Semi-metals such as graphene (9, 10) are described by a massless Dirac model with  $M = 0$ , although the bands have a different physical interpretation. In so-called inverted semiconductors such as HgTe, the s-like orbital lies below the p-like orbitals; therefore, the Dirac mass parameter  $M$  in the  $\mathrm{HgTe / (Hg,Cd)Te}$  QWs can be continuously tuned from a positive value  $M > 0$  for thin QWs with thickness  $d < d_{\mathrm{c}}$  to a negative value  $M < 0$  for thick QWs with  $d > d_{\mathrm{c}}$ . A topological quantum phase transition occurs at a critical thickness  $d = d_{\mathrm{c}}$ , where the system is effectively described by a massless Dirac theory as for graphene. The nature of this
+
+quantum phase transition has also been investigated in more realistic models beyond the simple four-band model presented here, reaching the same conclusion (11).
+
+The QSH phase occurs in the inverted regime where  $M < 0$ , i.e., when  $d > d_{\mathrm{c}}$ . The sample edge can be viewed as a domain wall of the mass parameter  $M$ , separating the topologically nontrivial phase with  $M < 0$  from the topologically trivial phase with  $M > 0$  which is adiabatically connected to the vacuum (12). Massless helical states are confined on the sample edge. The sample has a finite conductance even when the Fermi level lies inside the bulk insulating gap. Therefore, as suggested in (6), the QSH state can be experimentally detected by measuring a residual conductance plateau as one varies the gate voltage in the nominally insulating regime. Furthermore, because the current is carried by the edge states, the conductance should be independent of sample width. Protected by the time-reversal symmetry, nonmagnetic impurities or any other time-reversal invariant local perturbations cannot cause elastic backscattering of the helical edge states, which warrants the topological robustness of the edge state conductance. However, the presence of a magnetic field breaks time-reversal symmetry and therefore can open up a gap in the energy spectrum of the edge states and remove the residual conductance due to the edge states.
+
+Experimental details. We set out to test these theoretical predictions by measuring the transport properties of  $\mathrm{HgTe / (Hg,Cd)Te}$  QWs as a function of the sample thickness, the gate voltage, and the external magnetic field. We used modulation-doped type III (13)  $\mathrm{HgTe / Hg_{0.3}Cd_{0.7}Te}$  QW structures fabricated by molecular beam epitaxy (14), with widths (15) varying from  $5.5\mathrm{nm}$ $(d < d_{\mathrm{c}})$  to  $12\mathrm{nm}$ $(d > d_{\mathrm{c}})$ . Dedicated low-thermal budget optical and e-beam lithography was used to structure devices in Hall bar geometry with dimensions  $(L\times W)$  of  $(600\times 200)$ ,  $(20.0\times 13.3)$ ,  $(1.0\times 1.0)$ , and  $(1.0\times 0.5)\mu \mathrm{m}^2$  (Fig. 1A, inset). All devices had a  $110\mathrm{-nm}$ -thick  $\mathrm{Si}_3\mathrm{N}_4 / \mathrm{SiO}_2$  multilayer gate insulator (16) and a  $5/30\mathrm{nm}$  Ti/Au gate electrode stack. Transport measurements were done in a  ${}^{3}\mathrm{He}/{}^{4}\mathrm{He}$ -dilution refrigerator (base temperature  $T < 30\mathrm{mK}$ , uniaxial fields up to  $18\mathrm{T}$ ) and in a  ${}^{4}\mathrm{He}$  cryostat fitted with a vector magnet  $(T = 1.4\mathrm{K},$  and fields up to  $300\mathrm{mT}$  in variable direction), using lock-in techniques. At zero gate voltage, the samples were n-type, exhibiting carrier densities between  $1.3\times 10^{11}$  and  $3.5\times 10^{11}\mathrm{cm}^{-2}$  and mobilities up to  $1.5\times 10^{5}\mathrm{cm}^{2}\mathrm{V}^{-1}\mathrm{s}^{-1}$ . The carrier density could be reduced continuously by applying a negative gate voltage to the Au electrode with respect to carriers in the QW. The Si-O-N gate insulator stack allowed for quite large gate voltages, enabling us to gate the samples through the gap from n-type to p-type conductance.
+
+Field-induced phase transition. The change in carrier type can be monitored from Hall experiments, as shown in Fig. 1A for a large  $[ (L \times W) = (600 \times 200) \mu \mathrm{m}^2 ]$  Hall bar with a well width of  $6.5 \mathrm{~nm}$ , at  $30 \mathrm{mK}$ . The change in carrier type is directly reflected in a sign change of the slope of the Hall resistance  $R_{xy}$ , and we can directly infer that the carrier density varies from an electron density  $n = 1.2 \times 10^{11} \mathrm{~cm}^{-2}$  at gate voltage  $V_{\mathrm{g}} = -1.0 \mathrm{~V}$  to a hole density  $p = 1.0 \times 10^{10} \mathrm{~cm}^{-2}$  at  $V_{\mathrm{g}} = -2.0 \mathrm{~V}$ . At modest magnetic fields, for both n-type and p-type channels,  $R_{xy}$  exhibits quantum Hall plateaus, indicative of the good quality of the material, until at fields above  $\sim 3 \mathrm{T}$  the last Landau level is depleted.
+
+Notable transport behavior is observed for  $-1.9\mathrm{V}\leq V_{\mathrm{g}}\leq -1.4\mathrm{V}$  (see the green and the red traces in Fig. 1), where the sample is insulating at zero magnetic field (i.e., the Fermi level is in the gap). For these gate voltages, we observe that the sample undergoes a phase transition from an insulating state to a QH state with a quantized Hall conductance of  $G_{xy} = \pm e^2 /h$  either n- or p-type depending on  $V_{\mathrm{g}}$  ,at a small  $(\sim 1$  to  $2\textrm{T})$  applied magnetic field. The sample remains in the QH state for a few more T, and then becomes once again insulating. We observed this phenomenon in a number of samples in the inverted regime, with  $6.5~\mathrm{nm} < d < 12~\mathrm{nm}$
+
+The phase transition from an insulating state to a QH state is a nontrivial consequence of the inverted band structure of the QSH insulator and can be explained by the level crossing of the  $E1$  and HH1 Landau levels,
+
+which can be directly obtained from the minimal coupling of the simple Dirac model (Eq. 1) to a perpendicular magnetic field  $B_{\perp}$ . If we only consider the orbital effects of the magnetic field, two series of Landau levels are obtained from the upper and lower  $2 \times 2$  blocks of the Hamiltonian, Eq. 1, in which the two levels closest to the Fermi energy are given by  $E_{+} = C + M - (D + B)l_{\mathrm{c}}^{-2}$  and  $E_{-} = C - M - (D - B)l_{\mathrm{c}}^{-2}$ , with  $l_{c} \equiv \sqrt{\hbar / (eB_{\perp})}$ . Thus, the condition for level crossing is given by  $E_{+} - E_{-} = 2M - 2Bl_{\mathrm{c}}^{-2} = 0$  or  $B_{\perp}^{\mathrm{c}} = (hM) / (eB)$ . Generally, the  $B$  parameter is always negative; therefore, we can see that the level crossing occurs only in the inverted region with  $M < 0$ .
+
+The Landau levels for the normal  $(d < d_{\mathrm{c}})$  and the inverted  $(d > d_{\mathrm{c}})$  regime are shown in Fig. 2, A and B, respectively. Edge states in the presence of an external magnetic field can be easily obtained by solving our simple Dirac model in Eq. 1 with open boundary condition along one direction and periodic boundary condition along the other direction. Figure 2C shows the bulk and edge states for a conventional insulator. With increasing thickness  $d$  the two states closest to the Fermi energy approach and then cross each other. This "band inversion" leads to the bulk and edge states (Fig. 2D). The Fermi energy crosses a pair of counterpropagating edge states on each edge, resulting in no net Hall effect. These counterpropagating edge states are similar to the helical edge states of the QSH insulator. However, owing to the presence of the magnetic field and the breaking of the time-reversal
+
+![](images/20cec678d2ad42b21bc4d519ac304c8d7fc0b11c2b5dc6c420ef15b7427baa9d.jpg)  
+Fig. 1. (A) Hall resistance,  $R_{xy}$ , of a  $(L \times W) = (600 \times 200) \mu \mathrm{m}^2$  QW structure with 6.5-nm well width for different carrier concentrations obtained for gate voltages  $V_{g}$  of  $-1.0 \mathrm{~V}$  (black),  $-1.1 \mathrm{~V}$  (purple),  $-1.2 \mathrm{~V}$  (navy),  $-1.3 \mathrm{~V}$  (blue),  $-1.35 \mathrm{~V}$  (cyan),  $-1.4 \mathrm{~V}$  (green),  $-1.7 \mathrm{~V}$  (red),  $-1.8 \mathrm{~V}$  (orange),  $-1.9 \mathrm{~V}$  (brown), and  $-2.0 \mathrm{~V}$  (black, lower curve). For decreasing  $V_{g}$ , the n-type carrier concentration decreases and a transition to a p-type conductor is observed, passing through an insulating regime between  $-1.4$  and  $-1.9 \mathrm{~V}$  at  $B = 0$  T. The inset shows a schematic sample layout with ohmic contacts labeled 1 to 6. The gray shaded region indicates the top gate electrode and defines the part of the sample where the carrier concentration and type can be changed. Red and blue arrows indicate the counterpropagating spin-polarized edge channels of the QSH effect. (B) The Landau-level fan chart of a 6.5-nm QW obtained from an eight-band  $k \cdot p$  calculation. Black dashed lines indicate the energetic position of the Fermi energy,  $E_{F}$ , for  $V_{g} = -1.0$  and  $-2.0 \mathrm{~V}$ . Red and green dashed lines correspond to the  
+position of the Fermi energies of the red and green Hall resistance traces of (A). The Landau-level crossing points are marked by arrows of the same color.
+
+symmetry, they are not robustly protected. Starting from this case, increasing the magnetic field shifts the red Landau level toward higher and the blue one toward lower energies. When one of the bulk Landau level crosses the Fermi level, there remains a single edge state on each edge, and one obtains a net QH effect with either  $G_{xy} = e^2 /h$  (Fig. 2E) or with  $G_{xy} = -e^{2} / h$  (Fig. 2F). When the magnetic field is increased further, the second bulk Landau level crosses the Fermi level, and one reaches the conventional insulator case (Fig. 2C) but with the colors of the Landau level interchanged. In models with bulk inversion asymmetry (BIA) (11), the level crossing between  $E1$  and  $HH1$  Landau levels at  $B_{\perp}^{c}$  can be avoided, and the phase regions (i) and (ii) in Fig. 2B become connected. Generally, the nonmonotonic dependence of the Landau-level energies leads to the transition from the insulating state to the QH state at a constant Fermi energy, when the magnetic field is varied.
+
+![](images/bc48ac93fe0b8e977afd7c8806ff94e8bb7f7b819425a49bdf836c46e93cefb8.jpg)
+
+![](images/d242024176a08a19570e356b3396fbc4e674fff400f46371c0b9892f668c22e0.jpg)
+
+![](images/c1b59005f95991daa004404131656e8fe271ec8ecd2106ff0304d89ee29ed53b.jpg)
+
+![](images/8aa95e81435e5ac6fcce3ccff5b256201ef4181005e5a3d20ab79a2d06a2b2cb.jpg)
+
+![](images/ae38133a30f349bb47f535917048058e243f7e16d67612138ac4077dca74ad0e.jpg)  
+Fig. 2. Bulk and edge state spectrum of the four-band Dirac model described by Eq. 1 in the presence of an external orbital magnetic field. (A) The bulk Landau levels in the normal regime. (B) The bulk Landau levels in the inverted regime. A pair of low-lying Landau levels cross at a finite magnetic field  $B_{\perp}^{c}$ . The crossing divides the phase diagram of gate voltage and magnetic field into four regimes, labeled (i) to (iv). (C) The low-lying bulk and edge state energies as a function of the centers of the Landau orbitals in the normal regime. (D) The low-lying bulk and edge state energies as a function of the centers of the Landau orbitals for the inverted regime, where the Fermi energy lies in-between the two bulk inverted Landau levels. The Fermi energy crosses the Landau levels, giving rise to the pair of counterpropagating edge states. When the magnetic field is increased, the two lowest-lying bulk Landau levels approach each other, and they cross the Fermi energy in a different order, depending on the value of the gate voltage. The crossing of the Fermi energy by one of the Landau levels gives rise to either the n- or the p-type QHE for the cases shown in (E) and (F).
+
+![](images/796779b0df73d5709d362bdbdf6aae1cb1cbfc833bdc9759bf0a11c7330f6b52.jpg)
+
+Although the four-band Dirac model (Eq. 1) gives a simple qualitative understanding of this novel phase transition, we also performed more realistic and self-consistent eight-band  $\mathbf{k}\cdot \mathbf{p}$  model calculations (13) for a  $6.5\mathrm{-nm}$  quantum well, with the fan chart of the Landau levels displayed in Fig. 1B. The two anomalous Landau levels cross at a critical magnetic field  $B_{\perp}^{\mathrm{c}}$  which evidently depends on well width. This implies that when a sample has its Fermi energy in the gap at zero magnetic field, this energy will always be crossed by the two anomalous Landau levels, resulting in a QH plateau in-between the two crossing fields. Figure 3 summarizes the dependence of  $B_{\perp}^{\mathrm{c}}$  on well width  $d$ . The open red squares are experimental data points that result from fitting the eight-band  $\mathbf{k}\cdot \mathbf{p}$  model to experimental data as in Fig. 1, while the filled red triangles result solely from the  $\mathbf{k}\cdot \mathbf{p}$  calculation. For reference, the calculated gap energies are also plotted in this graph as open blue circles. The band inversion is reflected in the sign change of the gap. For relatively wide wells ( $d > 8.5\mathrm{nm}$ ), the (inverted) gap
+
+starts to decrease in magnitude. This is because for these well widths, the band gap no longer occurs between the  $E1$  and HH1 levels, but rather between HH1 and HH2—the second confined hole-like level, as schematically shown in the inset of Fig. 3 [see also (17)]. Also in this regime, a band crossing of conductance- (HH1) and valence- (HH2) band-derived Landau levels occurs with increasing magnetic field (13, 17, 18). Figure 3 clearly illustrates the quantum phase transition that occurs as a function of  $d$  in the HgTe QWs: Only for  $d > d_{\mathrm{c}}$  does  $B_{\perp}^{\mathrm{c}}$  exist, and at the same time the energy gap is negative (i.e., the band structure is inverted). The experimental data allow for a quite accurate determination of the critical thickness, yielding  $d_{\mathrm{c}} = 6.3 \pm 0.1 \mathrm{~nm}$ .
+
+Zero-field edge channels and the QSH effect. The actual existence of edge channels in insulating inverted QWs is only revealed when studying smaller Hall bars [the typical mobility of  $10^{5}\mathrm{cm}^{2}\mathrm{V}^{-1}\mathrm{s}^{-1}$  in n-type material implies an elastic mean free path of  $l_{\mathrm{mfp}} \approx 1\mu \mathrm{m}(19,20)$  and one may anticipate lower
+
+![](images/4aea1f7ffa067e94cd6d86646f4156eed0db097ab8204a20da248d3bcc910871.jpg)  
+Fig. 3. Crossing field,  $B_{\perp}^{c}$  (red triangles), and energy gap,  $E_{g}$  (blue open dots), as a function of QW width  $d$  resulting from an eight-band  $k \cdot p$  calculation. For well widths larger than  $6.3 \mathrm{~nm}$ , the QW is inverted and a mid-gap crossing of Landau levels deriving from the HH1 conductance and  $E1$  valence band occurs at finite magnetic fields. The experimentally observed crossing points are indicated by open red squares. The inset shows
+
+![](images/ca1435925a5a8f0d7410ca91ebfa5f844c4f2789df9f4769eb7b15b885a09287.jpg)  
+the energetic ordering of the QW subband structure as a function of QW width  $d$ . [See also (17)].  
+Fig. 4. The longitudinal four-terminal resistance,  $R_{14,23}$ , of various normal ( $d = 5.5$  nm) (I) and inverted ( $d = 7.3$  nm) (II, III, and IV) QW structures as a function of the gate voltage measured for  $B = 0$  T at  $T = 30$  mK. The device sizes are  $(20.0 \times 13.3) \mu \mathrm{m}^2$  for devices I and II,  $(1.0 \times 1.0) \mu \mathrm{m}^2$  for device III, and  $(1.0 \times 0.5) \mu \mathrm{m}^2$  for device IV. The inset shows  $R_{14,23}(V_g)$  of two samples from the same wafer, having the same device size (III) at  $30$  mK (green) and  $1.8$  K (black) on a linear scale.
+
+The pertinent data are shown in Fig. 4, which plots the zero  $B$ -field four-terminal resistance  $R_{14,23} \equiv V_{23} / I_{14}$  as a function of normalized gate voltage ( $V_{\mathrm{thr}}$  is defined as the voltage for which the resistance is largest) for several devices that are representative of the large number of structures we investigated.  $R_{14,23}$  is measured while the Fermi level in the device is scanned through the gap. In the low-resistance regions at positive  $V_{\mathrm{g}} - V_{\mathrm{thr}}$ , the sample is n-type; at negative  $V_{\mathrm{g}} - V_{\mathrm{thr}}$ , the sample is p-type.
+
+The black curve labeled I in Fig. 4 was obtained from a medium-sized  $\left[(20.0\times 13.3)\right.$ $\mu \mathrm{m}^2 ]$  device with a  $5.5\mathrm{-nm}$  QW and shows the behavior we observe for all devices with a normal band structure: When the Fermi level is in the gap,  $R_{14,23}$  increases strongly and is at least several tens of megohm (this is the detection limit of the lock-in equipment used in the experiment). This clearly is the expected behavior for a conventional insulator. However, for all devices containing an inverted QW, the resistance in the insulating regime remains finite.  $R_{14,23}$  plateaus at well below 100 kilohm (i.e.,  $G_{14,23} = 0.3e^{2} / h)$  for the blue curve labeled II, which is again for a  $(20.0\times 13.3)$ $\mu \mathrm{m}^2$  device fabricated by optical lithography, but that contains a  $7.3\mathrm{-nm}$  -wide QW. For much shorter samples  $(L = 1.0~{\mu\mathrm{m}}$  green and red curves III and IV) fabricated from the same wafer,  $G_{14,23}$  actually reaches the predicted value close to  $2e^{2} / h$  , demonstrating the existence of the QSH insulator state for inverted HgTe QW structures.
+
+Figure 4 includes data on two devices with  $d = 7.3 \mathrm{~nm}$ ,  $L = 1.0 \mu \mathrm{m}$ . The green trace (III) is from a device with  $W = 1.0 \mu \mathrm{m}$ , and the red trace (IV) corresponds to a device with  $W = 0.5 \mu \mathrm{m}$ . Clearly, the residual resistance of the devices does not depend on the width of the structure, which indicates that the transport occurs through edge channels (21). The traces for the  $d = 7.3 \mathrm{~nm}$ ,  $L = 1.0 \mu \mathrm{m}$  devices do not reach all the way into the p-region because the electron-beam lithography needed to fabricate the devices increases the intrinsic  $(V_{\mathrm{g}} = 0 \mathrm{~V})$  carrier concentration. In addition, fluctuations on the conductance plateaus in traces II, III, and IV are reproducible and do not stem from, e.g., electrical noise. Although all  $R_{14,23}$  traces discussed so far were taken at the base temperature  $(30 \mathrm{mK})$  of our dilution refrigerator, the conductance plateaus are not limited to this very-low-temperature regime. In the inset of Fig. 4, we reproduce the green  $30 \mathrm{mK}$  trace III on a linear scale and compare it with a trace (in black) taken at  $1.8 \mathrm{~K}$  from another  $(L \times W) = (1.0 \times 1.0) \mu \mathrm{m}^2$  sample, which was fabricated from the same wafer. In the fabrication of this sample, we used a lower-illumination dose in the e-beam lithography, resulting in a better (but still not quite complete) coverage of the n-i-p transition. Clearly, in this further sample, and at  $1.8 \mathrm{~K}$ , the  $2e^{2} / h$  conductance
+
+plateau is again present, including (thermally smeared) conductance fluctuations.
+
+In the pure two-terminal geometry, with only source and drain contacts (contacts 1 and 4, inset of Fig. 1A), the two counterpropagating helical edge states at one given edge connect the chemical potential from the source and drain, respectively, and they are not in equilibrium with each other because the elastic backscattering vanishes between these two channels. In the absence of voltage probes 2, 3, 5, and 6, as indicated in the inset of Fig. 1A, the two-terminal conductance should give  $2e^{2} / h$ . In the presence of the voltage probes, the voltage measurement necessarily leads to the equilibration of the two helical channels with the opposite spin orientation, because the voltage probes are not spin sensitive. A simple Landauer-Büttiker type of calculation shows that the four-terminal resistance should be given by  $R_{14,23} = h / 2e^2$ . In the presence of the voltage probes, the voltage drops  $V_{12}$ ,  $V_{23}$ , and  $V_{34}$  add in series to give a higher resistance of  $R_{14} \equiv V_{14} / I_{14} = 3h / 2e^2$ . These results are valid as long as the distance between the voltage probes is less than the inelastic mean free path  $l_{\mathrm{in}}$ . Although elastic scatterers cannot cause backscattering of the helical edge states, inelastic scatterers can. We estimate the inelastic mean free path to be  $l_{\mathrm{in}} > 1~\mu \mathrm{m}$  at our measurement temperature. Therefore, for the large sample (trace II), where the distance between the voltage probes exceeds the inelastic mean free path  $l_{\mathrm{in}}$ , we expect the residual resistance to be higher, consistent with the experimental measurement shown in trace II in Fig. 4.
+
+Breaking time-reversal symmetry. Another intriguing observation is that the QSH effect is destroyed by applying only a small magnetic field perpendicular to the 2DEG plane. Figure 5 shows that the magnetoresistance is strongly anisotropic. (These data were obtained in the vector magnet system at  $1.4\mathrm{K}$ .) A very sharp, cusplike conductance peak is observed for perpendicular field, with the full width at halfmaximum (FWHM)  $B_{\perp}^{\mathrm{FWHM}} \approx 28~\mathrm{mT}$  (22).
+
+The peak broadens strongly when the magnetic field is tilted into the QW plane. For fully in-plane fields, the QSH conductance can be observed over a much wider magnetic field range  $(B_{\parallel}^{\mathrm{FWHM}}\approx 0.7\mathrm{T})$
+
+The robustness of the helical edge states is ensured by the time-reversal symmetry. A magnetic field breaks time-reversal symmetry and thus turns on a gap between the two otherwise degenerate helical edge states. The perpendicular and in-plane magnetic field lead to different gaps, depending on the matrix elements of the magnetization operator:  $E_{\mathrm{gap,\perp}} = \langle \uparrow |(\hat{\mathbf{z}}\cdot \hat{\mathbf{r}}\times \hat{\mathbf{j}} +g_{\perp}\mu_{B}S_{\perp})|\downarrow \rangle |B|$  and  $E_{\mathrm{gap,||}} = \langle \uparrow |g_{||}\mu_{B}S_{||}|\downarrow \rangle |B|$ , in which  $\hat{\mathbf{r}},\hat{\mathbf{j}}$  are the position and electric current operator, respectively, and  $\hat{\mathbf{z}}$  is the unit-vector perpendicular to the QW plane.  $S_{\perp (\parallel)}$  stands for the dimensionless part of the Zeeman-coupling matrix element in a perpendicular (parallel) magnetic field. We can estimate the magnitude of these two gaps by noting that  $\langle \uparrow |\hat{\mathbf{z}}\cdot \hat{\mathbf{r}}\times \hat{\mathbf{j}} |\downarrow \rangle \sim e\nu \xi$  and  $\langle \uparrow |S_{||,\perp}|\downarrow \rangle \sim 1$ , in which  $\nu$  and  $\xi$  are the Fermi velocity and width of the edge channels, respectively.  $\nu$  and  $\xi$  can be obtained from the Dirac parameters as  $\nu = A / h$  and  $\xi \approx h\nu /|M|$ . The parameters for the  $d = 7.3\mathrm{-nm}$  QW give the dimensionless ratio  $e\nu \xi /\mu_{\mathrm{B}}\sim 280$ , which thus leads to  $E_{\mathrm{gap,\perp}} / E_{\mathrm{gap,||}}\sim 10^2$ . From this estimate, we can see that the strong anisotropy observed in the experiments originates from the high Fermi velocity of the edge states and the small bulk gap  $M$ , which together make the orbital magnetization dominant.
+
+Concluding remarks. Up to this point, our experiments only measured the charge-transport properties. Although the QSH effect was manifested in the change in transport properties, we still want to experimentally confirm the spin accumulation resulting from the spin Hall effect (23, 24) in the topologically nontrivial insulating regime and compare both electric and magnetic results with the experiments of the spin Hall effect in the metallic regime. It would also be interesting to explore the regime close to the quantum phase transition point of  $d = d_{\mathrm{c}}$  and compare the transport
+
+![](images/8ceb51df36c0bbe7c7a00fe2c5c5b025dc1c31a84ce44cd50220e3ece0ffead5.jpg)  
+Fig. 5. Four-terminal magnetoconductance,  $G_{14,23}$ , in the QSH regime as a function of tilt angle between the plane of the 2DEG and applied magnetic field for a  $d = 7.3$  nm QW structure with dimensions  $(L \times \Omega) = (20 \times 13.3) \mu \mathrm{m}^2$  measured in a vector field cryostat at  $1.4$  K.
+
+properties in that regime with that of the recently discovered graphene. In many ways, the HgTe Qw system can be viewed as a tunable graphene system, where the Dirac mass term can be tuned continuously to zero from either the positive (topologically trivial) or the negative (topologically nontrivial) side.
+
+# References and Notes
+
+1. S. Murakami, N. Nagaosa, S. C. Zhang, Science 301, 1348 (2003).  
+2. J. Sinova et al., Phys. Rev. Lett. 92, 126603 (2004).  
+3. S. Murakami, N. Nagaosa, S. C. Zhang, Phys. Rev. Lett. 93, 156804 (2004).  
+4. C. L. Kane, E. J. Mele, Phys. Rev. Lett. 95, 146802 (2005).  
+5. B. A. Bernevig, S. C. Zhang, Phys. Rev. Lett. 96, 106802 (2006).  
+6. B. A. Bernevig, T. L. Hughes, S. C. Zhang, Science 314, 1757 (2006).  
+7. C. Wu, B. A. Bernevig, S. C. Zhang, Phys. Rev. Lett. 96, 106401 (2006).  
+8.C.XuJ.MoorePhys.Rev.B73,045322 2006  
+9. K. S. Novoselov et al., Nature 438, 197 (2005).  
+10. Y. Zhang, Y. Tan, H. L. Stormer, P. Kim, Nature 438, 201 (2005).  
+11. X. Dai, T. L. Hughes, X.-L. Qi, Z. Fang, S.-C. Zhang, http://arxiv.org/abs/0705.1516 (2007).  
+12. Similar mass domain walls have been proposed to occur in three-dimensional in PbTe/(Pb,Sn)Te heterostructures, where the  $l_{6}^{\pm}$  bands change position as a function of Sn concentration (25, 26).  
+13. E. G. Novik et al., Phys. Rev. B 72, 035321 (2005).  
+14. C. Becker et al., Phys. Stat. Sol. (C) 4, 3382 (2007).  
+15. Well thicknesses have been calibrated by x-ray reflectivity measurements at the DESY synchrotron in Hamburg, Germany.  
+16. J. Hinz et al., Semicond. Sci. Technol. 21, 501 (2006).  
+17. A. Pfeuffer-Jeschke, thesis, University of Wurzburg, Germany (2000).  
+18. M. Schultz et al., Phys. Rev. B 57, 14772 (1998).  
+19. V. Daumer et al., Appl. Phys. Lett. 83, 1376 (2003).  
+20. M. König et al., Phys. Rev. Lett. 96, 076804 (2006).  
+21. We have observed a similar independence of resistance on sample width in the  $d = 7\mathrm{nm}$ $L = 20.0~{\mu\mathrm{m}}$  devices, showing that also in these larger structures, the conductance is completely dominated by edge channels.  
+22. FWHM of the magnetoresistance peak is about  $10\mathrm{mT}$  at  $30\mathrm{mK}$ , increasing to  $28\mathrm{mT}$  at  $1.4\mathrm{K}$ .  
+23. Y. K. Kato, R. C. Myers, A. C. Gossard, D. D. Awschalom, Science 306, 1910 (2004).  
+24. J. Wunderlich, B. Kaestner, J. Sinova, T. Jungwirth, Phys. Rev. Lett. 94, 047204 (2005).  
+25. B. A. Volkov, O. A. Pankratov, JETP Lett. 42, 178 (1985).  
+26. E. Fradkin, E. Dagotto, D. Boyanovsky, Phys. Rev. Lett. 57, 2967 (1986).  
+27. We thank A. Bernevig, X. Dai, Z. Fang, T. Hughes, C. X. Liu, and C. J. Wu for insightful discussions; C. R. Becker and V. Hock for sample preparation; and C. Kumpf for calibrating the well widths of the HgTe samples. This work is supported by the Deutsche Forschungsgemeinschaft (grant SFB 410); the German-Israeli Foundation for Scientific Research and Development (grant 881/05); the NSF (grant DMR-0342832); the U.S. Department of Energy, Office of Basic Energy Sciences, under contract DE-AC03-76SF00515; and Focus Center Research Program (FCRP) Center on Functional Engineered Nanoarchitectonics (FENA).  
+19 June 2007; accepted 10 September 2007  
+Published online 20 September 2007;  
+10.1126/science.1148047  
+Include this information when citing this paper.
