@@ -1,0 +1,116 @@
+{
+  "metadata": {
+    "project_version": "1.0",
+    "created_date": "2025-10-24T21:27:32.812741",
+    "last_updated": "2025-10-24T21:29:15.456429",
+    "total_papers": 1,
+    "analysis_model": "gpt-4",
+    "embedding_model": "text-embedding-3-small",
+    "data_sources": []
+  },
+  "professor_info": {
+    "name": "测试教授",
+    "department": "未知",
+    "university": "未知",
+    "research_areas": []
+  },
+  "papers": [
+    {
+      "id": "001",
+      "title": "Experimental quantum Hamiltonian learning",
+      "authors": [
+        "测试教授"
+      ],
+      "year": 2025,
+      "md_filename": "D:\\学习软件\\2025秋\\学术开盒demo\\data\\sample\\main\\Experimental quantum Hamiltonian learning.md",
+      "summary": "总结生成失败。"
+    }
+  ],
+  "analysis_results": {
+    "001": {
+      "professor_interests": {
+        "score": 0.2877198934555054,
+        "confidence": 0.5,
+        "evidence": "the Barriers of Optical Integration (BBOI), Quantum Simulation on a Photonic Chip (QuChip), and Wavelength-tunable Advanced Single Photon Sources (WASPS), US Army Research Office (ARO), and the Centre...",
+        "reasoning": "Analysis based on similarity score only due to error: Error code: 503 - {'error': {'code': 'model_not_found', 'message': '分组 default 下模型 gpt-4 无可用渠道（distributor） (request id: 20251024212909225124688wgvu0GEP)', 'type': 'new_api_error'}}",
+        "inference_level": "direct_evidence",
+        "similarity_score": 0.2877198934555054,
+        "question_weight": 0.4,
+        "chunks_analyzed": 5,
+        "chunks_used": [
+          {
+            "preview": "the Barriers of Optical Integration (BBOI), Quantum Simulation on a Photonic Chip (QuChip), and Wavelength-tunable Advanced Single Photon Sources (WASPS), US Army Research Office (ARO), and the Centre...",
+            "similarity_score": 1.3089549541473389,
+            "source_type": "author_bio"
+          },
+          {
+            "preview": "Author contributions\n\nJ.W., S.P., R.S., S.K. and N.W. conceived and designed the experiments. N.W. provided theoretical support. S.P. and M.P. performed the simulations. J.W., S.P., R.S., S.K. and A.A...",
+            "similarity_score": 1.4591511487960815,
+            "source_type": "research_content"
+          },
+          {
+            "preview": "Data availability. The data that support the plots within this paper and other findings of this study are available from the corresponding author upon reasonable request.\n\nReferences\n\nSharping, J. E. ...",
+            "similarity_score": null,
+            "source_type": "author_bio"
+          }
+        ]
+      },
+      "field_problems": {
+        "score": 0.22693933248519893,
+        "confidence": 0.5,
+        "evidence": "In science and engineering $^{17,18}$ , physical systems are approximated by simplified models to allow the comprehension of their essential features. The utility of the model hinges upon the fidelity...",
+        "reasoning": "Analysis based on similarity score only due to error: Error code: 503 - {'error': {'code': 'model_not_found', 'message': '分组 default 下模型 gpt-4 无可用渠道（distributor） (request id: 202510242129122127925202M8cA4Sw)', 'type': 'new_api_error'}}",
+        "inference_level": "direct_evidence",
+        "similarity_score": 0.22693933248519893,
+        "question_weight": 0.35,
+        "chunks_analyzed": 5,
+        "chunks_used": [
+          {
+            "preview": "In science and engineering $^{17,18}$ , physical systems are approximated by simplified models to allow the comprehension of their essential features. The utility of the model hinges upon the fidelity...",
+            "similarity_score": 1.5188558101654053,
+            "source_type": "research_content"
+          },
+          {
+            "preview": "While the subjectivity of the initial prior distribution is a hotly debated subject among statisticians, the use of priors does an excellent job here, addressing the fact that we almost always start e...",
+            "similarity_score": 1.5456557273864746,
+            "source_type": "research_content"
+          },
+          {
+            "preview": "Author contributions\n\nJ.W., S.P., R.S., S.K. and N.W. conceived and designed the experiments. N.W. provided theoretical support. S.P. and M.P. performed the simulations. J.W., S.P., R.S., S.K. and A.A...",
+            "similarity_score": 1.566720962524414,
+            "source_type": "research_content"
+          }
+        ]
+      },
+      "undergraduate_projects": {
+        "score": 0.3030434250831604,
+        "confidence": 0.5,
+        "evidence": "the Barriers of Optical Integration (BBOI), Quantum Simulation on a Photonic Chip (QuChip), and Wavelength-tunable Advanced Single Photon Sources (WASPS), US Army Research Office (ARO), and the Centre...",
+        "reasoning": "Analysis based on similarity score only due to error: Error code: 503 - {'error': {'code': 'model_not_found', 'message': '分组 default 下模型 gpt-4 无可用渠道（distributor） (request id: 202510242129149709122240mbrRtjB)', 'type': 'new_api_error'}}",
+        "inference_level": "direct_evidence",
+        "similarity_score": 0.3030434250831604,
+        "question_weight": 0.25,
+        "chunks_analyzed": 5,
+        "chunks_used": [
+          {
+            "preview": "the Barriers of Optical Integration (BBOI), Quantum Simulation on a Photonic Chip (QuChip), and Wavelength-tunable Advanced Single Photon Sources (WASPS), US Army Research Office (ARO), and the Centre...",
+            "similarity_score": 1.2720181941986084,
+            "source_type": "author_bio"
+          },
+          {
+            "preview": "Author contributions\n\nJ.W., S.P., R.S., S.K. and N.W. conceived and designed the experiments. N.W. provided theoretical support. S.P. and M.P. performed the simulations. J.W., S.P., R.S., S.K. and A.A...",
+            "similarity_score": 1.428977370262146,
+            "source_type": "research_content"
+          },
+          {
+            "preview": "Data availability. The data that support the plots within this paper and other findings of this study are available from the corresponding author upon reasonable request.\n\nReferences\n\nSharping, J. E. ...",
+            "similarity_score": 1.422481894493103,
+            "source_type": "author_bio"
+          }
+        ]
+      }
+    }
+  },
+  "correlation_data": {},
+  "report_cache": {}
+}

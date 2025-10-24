@@ -586,13 +586,13 @@ Provide your analysis in JSON format. Make your explanation comprehensive yet ac
             
         except Exception as e:
             print(f"⚠️  Error in LLM analysis: {e}")
-            # 降级方案：仅使用相似度分数
+            # API 调用失败，返回明确的错误信息
             result = {
-                "score": similarity_score,
-                "confidence": 0.5,
-                "evidence": context[:200] + "..." if context else "",
-                "reasoning": f"Analysis based on similarity score only due to error: {str(e)}",
-                "inference_level": inference_level,
+                "score": 0,
+                "confidence": 0,
+                "evidence": "N/A",
+                "reasoning": f"APIError: LLM analysis failed. Error: {str(e)}",
+                "inference_level": "error",
                 "similarity_score": similarity_score,
                 "question_weight": question_weight,
                 "chunks_analyzed": len(relevant_chunks),
@@ -628,41 +628,39 @@ Provide your analysis in JSON format. Make your explanation comprehensive yet ac
     def process_papers_batch(
         self, 
         papers_info: List[Dict[str, Any]], 
-        paper_directory: str,
         file_type: str = "pdf"
     ) -> Dict[str, Any]:
         """
         批量处理论文（完整流程：加载 -> 分割 -> 向量化 -> 分析）
         
         Args:
-            papers_info: 论文信息列表，每项包含 id, title, authors, year, pdf_filename/md_filename
-            paper_directory: 论文文件所在目录
+            papers_info: 论文信息列表，每项包含 id, title, 和一个包含绝对路径的 'md_filename'
             file_type: 文件类型，支持 "pdf" 或 "md" (markdown)
             
         Returns:
             包含所有分析结果的字典
         """
-        paper_dir = Path(paper_directory)
         all_chunks = []
         summaries = {}
         analysis_results = {}
         
-        # 确定文件扩展名和字段名
-        file_ext = "pdf" if file_type == "pdf" else "md"
-        filename_key = "pdf_filename" if file_type == "pdf" else "md_filename"
+        # 确定文件名键
+        filename_key = "md_filename" if file_type == "md" else "pdf_filename"
         
         # 步骤 1-2: 加载并分割所有论文
         for paper_info in papers_info:
-            paper_id = paper_info['id']
-            # 支持两种字段名
-            paper_filename = paper_info.get(filename_key, paper_info.get('pdf_filename', f"{paper_id}.{file_ext}"))
-            paper_path = paper_dir / paper_filename
-            
+            # 直接从 paper_info 获取绝对路径
+            paper_path_str = paper_info.get(filename_key)
+            if not paper_path_str:
+                print(f"⚠️  Skipping paper {paper_info.get('id')} due to missing file path.")
+                continue
+
+            paper_path = Path(paper_path_str)
             if not paper_path.exists():
                 print(f"⚠️  File not found: {paper_path}")
                 continue
             
-            # 加载论文（对于 PDF 和 Markdown，load_single_paper 会自动处理）
+            # 加载论文
             documents = self.load_single_paper(str(paper_path), paper_info)
             
             # 分割文档
