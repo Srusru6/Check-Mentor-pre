@@ -15,13 +15,40 @@ REPORT_TEMPLATE = """
 """
 
 FINAL_SYNTHESIS_TEMPLATE = """
-请基于以下各个方面的分析报告，生成一份完整的教授研究特点综合报告：
+# 关于{professor_name}教授的学术研究分析报告
 
-{aspect_reports}
+---
 
-要求：
-1. 内容完整，逻辑连贯
-2. 突出重点，有明确的结论
-3. 给出对本科生参与科研的建议
-4. 字数控制在800字以内
+## 1. 核心研究贡献与方向
+
+### **综合评述**
+{contribution_summary}
+
+### **关键贡献一览**
+{contribution_details}
+
+---
+
+## 2. 所处领域的热点问题
+
+### **综合评述**
+{field_problems_summary}
+
+### **热点问题一览**
+{field_problems_details}
+
+---
+
+## 3. 本科生科研项目建议
+
+### **综合评述**
+{undergrad_projects_summary}
+
+### **项目点子一览**
+{undergrad_projects_details}
+
+---
+*这份报告由AI根据提供的论文数据自动生成，旨在提供一个高度凝练的学术快照，仅供参考。*
 """
+
+

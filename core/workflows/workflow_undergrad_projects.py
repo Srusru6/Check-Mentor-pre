@@ -1,0 +1,167 @@
+"""
+Workflow 3: 分析本科生可参与的项目
+
+该工作流的目标是回答第三个核心问题：
+"有哪些适合本科生参与的科研项目？"
+
+它通过以下步骤实现：
+1. 接收关键参考文献（ref1_papers）和潜在项目文献（ref2_papers）作为输入。
+2. 设计一个AI评估机制，从“工作复杂度”和“本科生友好度”两个维度对每篇论文进行打分。
+3. 基于得分适中的论文，提炼出潜在的、可操作性强的本科生科研项目点。
+"""
+import json
+from typing import List, Dict, Any
+
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import JsonOutputParser
+
+from .. import config
+
+class UndergradProjectsWorkflow:
+    """
+    分析本科生可参与项目的工作流。
+    """
+    def __init__(self):
+        """
+        初始化工作流。
+        """
+        print("  -> UndergradProjectsWorkflow initialized.")
+        self.llm = ChatOpenAI(
+            model=config.LLM_MODEL,
+            openai_api_key=config.OPENAI_API_KEY,
+            base_url=config.OPENAI_API_BASE,
+            temperature=0.3
+        )
+
+    def _load_paper_content(self, file_path: str) -> str:
+        """加载指定路径的 Markdown 文件内容。"""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                return f.read()
+        except Exception as e:
+            print(f"    ⚠️ Error loading file {file_path}: {e}")
+            return ""
+
+    def _evaluate_single_paper(self, paper_content: str) -> Dict[str, Any]:
+        """
+        使用 LLM 评估单篇论文，判断其“工作复杂度”和“本科生友好度”。
+        """
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are an experienced professor evaluating research papers for potential undergraduate projects.
+Provide a JSON response with the following structure:
+{{
+  "complexity_score": <An integer score from 1 (very simple) to 10 (very complex) for the overall technical difficulty>,
+  "friendliness_score": <An integer score from 1 (very unfriendly) to 10 (very friendly) for undergraduate involvement, considering required background knowledge and feasibility>,
+  "project_idea": "<A concrete, one-sentence project idea for an undergraduate based on this paper. If not suitable, state 'Not suitable'.>"
+}}"""),
+            ("user", "Please evaluate the following paper content for undergraduate project suitability and provide the structured JSON output:\n\n---\n{paper_content}\n---")
+        ])
+        
+        parser = JsonOutputParser()
+        chain = prompt | self.llm | parser
+
+        # 为了避免 API 调用，暂时注释掉并返回占位符
+        # evaluation_result = chain.invoke({"paper_content": paper_content[:12000]})
+        evaluation_result = {
+            "complexity_score": 6, # 占位分数
+            "friendliness_score": 7, # 占位分数
+            "project_idea": "占位项目点子：复现论文中的某个关键实验或仿真。"
+        }
+        
+        return evaluation_result
+
+    def _synthesize_project_suggestions(self, suitable_papers: List[Dict[str, Any]]) -> str:
+        """
+        基于筛选出的论文，综合生成一份项目建议总结。
+        """
+        prompt = ChatPromptTemplate.from_template("""You are a helpful academic advisor. Based on a list of papers suitable for undergraduates, create a summary of potential research project areas.
+
+The evaluated papers are provided below:
+{papers_json}
+
+Your summary should:
+1. Group the project ideas into 2-3 thematic areas.
+2. Provide a brief, encouraging narrative about why these areas are exciting for undergraduate research.
+3. Be about 150-200 words.
+
+Synthesized Summary of Project Suggestions:""")
+
+        chain = prompt | self.llm
+
+        papers_json_str = json.dumps(suitable_papers, indent=2, ensure_ascii=False)
+
+        # 为了避免 API 调用，暂时注释掉并返回占位符
+        # synthesis_result = chain.invoke({"papers_json": papers_json_str})
+        # return synthesis_result.content
+        return "此部分为本科生项目建议综合总结占位符。基于对相关文献的评估，我们发现以下几个方向非常适合本科生进行初步的科研探索：[占位符方向1] 和 [占位符方向2]。这些项目不仅能帮助学生掌握前沿知识，还能锻炼关键的实验或编程能力。"
+
+    def run(self, ref1_papers: List[Dict[str, Any]], ref2_papers: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        执行分析本科生项目的完整流程。
+        """
+        all_papers = ref1_papers + ref2_papers
+        print(f"  -> Running UndergradProjectsWorkflow on {len(all_papers)} papers.")
+
+        if not all_papers:
+            print("  -> No papers provided. Skipping workflow.")
+            return {
+                "summary": "没有提供任何论文，无法分析本科生可参与的项目。",
+                "project_ideas": [],
+                "rated_papers": []
+            }
+
+        # 步骤1: 对每篇论文进行评估
+        all_evaluated_papers = []
+        for paper in all_papers:
+            print(f"    -> Evaluating paper: {paper['title']}")
+            content = self._load_paper_content(paper['md_filename'])
+            if not content:
+                continue
+            
+            evaluation = self._evaluate_single_paper(content)
+            evaluation['paper_id'] = paper['id']
+            evaluation['title'] = paper['title']
+            all_evaluated_papers.append(evaluation)
+
+        # 步骤2: 筛选合适的论文 (复杂度适中，友好度较高)
+        suitable_papers = [
+            p for p in all_evaluated_papers 
+            if 4 <= p.get("complexity_score", 0) <= 8 
+            and p.get("friendliness_score", 0) >= 6
+        ]
+        print(f"    -> Found {len(suitable_papers)} suitable papers for undergraduate projects.")
+
+        # 步骤3: 综合项目建议
+        if suitable_papers:
+            print("    -> Synthesizing project suggestions...")
+            summary = self._synthesize_project_suggestions(suitable_papers)
+            project_ideas = [
+                {
+                    "paper_id": p['paper_id'],
+                    "title": p['title'],
+                    "idea": p.get("project_idea")
+                }
+                for p in suitable_papers if "Not suitable" not in p.get("project_idea", "")
+            ]
+        else:
+            print("    -> No suitable papers found. Cannot synthesize project suggestions.")
+            summary = "没有发现难度适中且适合本科生参与的论文，无法提供具体的项目建议。"
+            project_ideas = []
+
+        # 步骤4: 格式化最终输出
+        final_result = {
+            "summary": summary,
+            "project_ideas": project_ideas,
+            "rated_papers": [
+                {
+                    "paper_id": p['paper_id'],
+                    "title": p['title'],
+                    "complexity_score": p.get('complexity_score', 'N/A'),
+                    "friendliness_score": p.get('friendliness_score', 'N/A')
+                }
+                for p in all_evaluated_papers
+            ]
+        }
+
+        return final_result
