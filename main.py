@@ -20,14 +20,28 @@ def main():
     print(f"{'='*70}\n")
 
     # --- 基本设置 ---
+    # True:  使用 data/sample/main 中的一篇论文进行测试
+    # False: 使用 data/王剑威 中所有论文进行完整分析
+    test_mode = True 
+    
     base_dir = Path(__file__).parent.resolve()
-    professor_name = "测试教授"
+    professor_name = "测试教授" if test_mode else "王剑威"
     output_data_file = base_dir / "output" / f"{professor_name}_research_data.json"
     
     # --- 准备论文数据 ---
-    # 使用 data/sample/main 中的论文作为测试数据
-    paper_input_dir = base_dir / 'data' / 'sample' / 'main'
-    
+    paper_input_dirs = []
+    if test_mode:
+        # 测试模式：使用 data/sample/main 中的论文
+        paper_input_dirs.append(base_dir / 'data' / 'sample' / 'main')
+    else:
+        # 完整模式：使用 data/王剑威 中的论文
+        wang_jianwei_dir = base_dir / 'data' / '王剑威'
+        paper_input_dirs.extend([
+            wang_jianwei_dir / 'main',
+            wang_jianwei_dir / 'ref1',
+            wang_jianwei_dir / 'ref2'
+        ])
+
     # --- 任务一和任务二：处理论文并进行分析 ---
     # 这两个任务紧密相连，统一由 RAG 处理器完成
     print("\n--- 任务一 & 二：开始处理论文并进行问题评分 ---")
@@ -50,20 +64,32 @@ def main():
         # 4. 准备论文信息列表
         papers_info = []
         paper_id_counter = 1
-        for md_filename in os.listdir(paper_input_dir):
-            if md_filename.endswith(".md"):
-                paper_path = paper_input_dir / md_filename
-                paper_id = f"{paper_id_counter:03d}"
-                paper_info = {
-                    "id": paper_id,
-                    "title": paper_path.stem,
-                    "authors": [professor_name],
-                    "year": datetime.now().year,
-                    "md_filename": str(paper_path.resolve()), # 使用绝对路径
-                    "summary": "" # 总结将由 RAG 处理器生成
-                }
-                papers_info.append(paper_info)
-                paper_id_counter += 1
+        
+        for paper_dir in paper_input_dirs:
+            if not paper_dir.exists():
+                print(f"警告：目录不存在，跳过: {paper_dir}")
+                continue
+            
+            file_list = list(os.listdir(paper_dir))
+            
+            # 在测试模式下，只取一篇论文
+            if test_mode and len(file_list) > 0:
+                file_list = file_list[:1]
+
+            for md_filename in file_list:
+                if md_filename.endswith(".md"):
+                    paper_path = paper_dir / md_filename
+                    paper_id = f"{paper_id_counter:03d}"
+                    paper_info = {
+                        "id": paper_id,
+                        "title": paper_path.stem,
+                        "authors": [professor_name],
+                        "year": datetime.now().year,
+                        "md_filename": str(paper_path.resolve()), # 使用绝对路径
+                        "summary": "" # 总结将由 RAG 处理器生成
+                    }
+                    papers_info.append(paper_info)
+                    paper_id_counter += 1
 
         if not papers_info:
             print("错误：在指定目录中未找到 .md 格式的论文文件。")
@@ -122,9 +148,15 @@ def main():
         print(final_report)
         print("="*75)
 
+        # 将最终报告保存为 Markdown 文件
+        report_md_file = base_dir / "output" / f"{professor_name}_final_report.md"
+        with open(report_md_file, 'w', encoding='utf-8') as f:
+            f.write(final_report)
+        print(f"\n最终报告已保存为 Markdown 文件: {report_md_file}")
+
         # 保存包含报告缓存的最终数据
         analyzer.save_results()
-        print(f"\n最终报告及所有数据已保存至: {output_data_file}")
+        print(f"\n最终 JSON 数据及缓存已保存至: {output_data_file}")
         print("--- 任务三：报告生成完成 ---\n")
 
     except Exception as e:
