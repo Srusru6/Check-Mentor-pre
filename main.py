@@ -80,13 +80,18 @@ def main():
                 if md_filename.endswith(".md"):
                     paper_path = paper_dir / md_filename
                     paper_id = f"{paper_id_counter:03d}"
+                    
+                    # 思路一：增加标志，判断是否为教授本人的作品
+                    is_own_work = (paper_dir.name == 'main')
+
                     paper_info = {
                         "id": paper_id,
                         "title": paper_path.stem,
                         "authors": [professor_name],
                         "year": datetime.now().year,
                         "md_filename": str(paper_path.resolve()), # 使用绝对路径
-                        "summary": "" # 总结将由 RAG 处理器生成
+                        "summary": "", # 总结将由 RAG 处理器生成
+                        "is_own_work": is_own_work # 新增字段
                     }
                     papers_info.append(paper_info)
                     paper_id_counter += 1

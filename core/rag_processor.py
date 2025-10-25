@@ -370,6 +370,7 @@ Provide a structured summary in 200-300 words. If this appears to be author biog
         self, 
         paper_id: str, 
         question_key: str,
+        is_own_work: bool, # 新增参数
         top_k: int = 5
     ) -> Dict[str, Any]:
         """
@@ -378,6 +379,7 @@ Provide a structured summary in 200-300 words. If this appears to be author biog
         Args:
             paper_id: 论文 ID
             question_key: 核心问题的键值
+            is_own_work: 论文是否为教授本人所写
             top_k: 检索的文本块数量
             
         Returns:
@@ -390,7 +392,7 @@ Provide a structured summary in 200-300 words. If this appears to be author biog
         question = get_question(question_key, language="en")
         question_weight = get_question_weight(question_key)
         
-        print(f"🔍 Analyzing relevance for question: {question_key}")
+        print(f"🔍 Analyzing relevance for question: {question_key} (Own work: {is_own_work})")
         
         # 检索相关文本块（仅限该论文）- 改进查询以优先获取研究内容
         # 使用更具体的查询，避免匹配参考文献
@@ -518,34 +520,59 @@ Provide a structured summary in 200-300 words. If this appears to be author biog
         
         # 限制为最多3个唯一块
         unique_chunks_used = unique_chunks_used[:3]
-        analysis_prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an expert academic reviewer specializing in analyzing research papers and professor profiles. 
-Your task is to analyze how well a research paper contributes to understanding a professor's research interests and the broader field.
 
-Provide a comprehensive but accessible analysis that is scientifically rigorous yet easy to understand. 
+        # --- 思路一：动态构建 Prompt ---
+        if is_own_work:
+            system_prompt = """You are an expert academic reviewer analyzing a professor's own research paper.
+Your task is to analyze how well this paper contributes to understanding the professor's research.
+Provide a comprehensive but accessible analysis that is scientifically rigorous yet easy to understand.
 Focus on key insights, practical implications, and educational value.
+If the content appears to be from author biography, you may still make reasonable inferences, but clearly indicate this uncertainty.
+Provide a JSON response with the specified structure.
+"""
+            user_prompt = """Question: {question}
 
-If the content appears to be from author biography rather than research content, you may still make reasonable inferences about potential research directions, but clearly indicate this uncertainty.
+Relevant content from the professor's own paper:
+{context}
 
-Provide a JSON response with the following structure:
+Based on the above content, evaluate how well this paper helps answer the question about the professor's work.
+Consider the similarity score from vector search: {similarity_score:.3f}
+Content source analysis: {inference_level_desc}
+
+Provide your analysis in JSON format. Make your explanation comprehensive yet accessible, scientifically rigorous but not overly technical.
+"""
+        else: # is_own_work is False
+            system_prompt = """You are an expert academic analyst. You are analyzing a paper that was CITED BY a professor, but NOT WRITTEN by them.
+Your task is to infer why the professor might have cited this reference.
+Focus on how this reference paper's content could support or relate to the professor's potential research interests.
+DO NOT assume the author of this paper is the professor being analyzed.
+Provide a JSON response with the specified structure.
+"""
+            user_prompt = """Question: {question}
+
+Relevant content from a paper CITED BY the professor (NOT their own work):
+{context}
+
+Based on this content, infer why the professor might have cited this paper in relation to the question.
+For example, does this reference provide foundational theory, a method the professor might use, or a result they want to compare against?
+The "score" should reflect how strongly this reference paper informs us about the professor's work on this topic.
+Consider the similarity score from vector search: {similarity_score:.3f}
+Content source analysis: {inference_level_desc}
+
+Provide your analysis in JSON format. Clearly state that this is an inference based on a cited work.
+"""
+
+        analysis_prompt = ChatPromptTemplate.from_messages([
+            ("system", system_prompt + """
+Common JSON structure:
 {{
-  "score": <float 0-1, how relevant this paper is to the question>,
+  "score": <float 0-1, relevance to the question>,
   "confidence": <float 0-1, your confidence in this assessment>,
   "evidence": "<key evidence from the paper, explained clearly>",
   "reasoning": "<comprehensive explanation that is simple but scientifically accurate>",
   "inference_level": "<direct_evidence|inferred_from_bio|weak_inference>"
 }}"""),
-            ("user", """Question: {question}
-
-Relevant paper content:
-{context}
-
-Based on the above content, evaluate how well this paper helps answer the question. 
-Consider the similarity score from vector search: {similarity_score:.3f}
-
-Content source analysis: {inference_level_desc}
-
-Provide your analysis in JSON format. Make your explanation comprehensive yet accessible, scientifically rigorous but not overly technical. If using biographical information, clearly note the inferential nature of your analysis.""")
+            ("user", user_prompt)
         ])
         
         # 创建 JSON 解析器
@@ -602,24 +629,25 @@ Provide your analysis in JSON format. Make your explanation comprehensive yet ac
         print(f"✓ Relevance score: {result['score']:.3f}, Confidence: {result['confidence']:.3f}, Inference: {result['inference_level']}")
         return result
     
-    def analyze_all_questions_for_paper(self, paper_id: str) -> Dict[str, Dict[str, Any]]:
+    def analyze_all_questions_for_paper(self, paper_id: str, is_own_work: bool) -> Dict[str, Dict[str, Any]]:
         """
         分析论文对所有核心问题的相关性
         
         Args:
             paper_id: 论文 ID
+            is_own_work: 论文是否为教授本人所写
             
         Returns:
             完整的相关性分析结果
         """
         print(f"\n{'='*70}")
-        print(f"📊 Analyzing paper {paper_id} for all core questions")
+        print(f"📊 Analyzing paper {paper_id} for all core questions (Own work: {is_own_work})")
         print(f"{'='*70}\n")
         
         relevance_analysis = {}
         
         for question_key in CORE_QUESTIONS.keys():
-            analysis = self.analyze_paper_relevance(paper_id, question_key)
+            analysis = self.analyze_paper_relevance(paper_id, question_key, is_own_work)
             relevance_analysis[question_key] = analysis
         
         print(f"\n✓ Complete analysis for paper {paper_id}")
@@ -634,7 +662,7 @@ Provide your analysis in JSON format. Make your explanation comprehensive yet ac
         批量处理论文（完整流程：加载 -> 分割 -> 向量化 -> 分析）
         
         Args:
-            papers_info: 论文信息列表，每项包含 id, title, 和一个包含绝对路径的 'md_filename'
+            papers_info: 论文信息列表，每项包含 id, title, 'md_filename', 和 'is_own_work'
             file_type: 文件类型，支持 "pdf" 或 "md" (markdown)
             
         Returns:
@@ -673,6 +701,7 @@ Provide your analysis in JSON format. Make your explanation comprehensive yet ac
         # 步骤 5: 对每篇论文进行相关性分析
         for paper_info in papers_info:
             paper_id = paper_info['id']
+            is_own_work = paper_info.get('is_own_work', True) # 获取标志
             
             # 生成总结
             try:
@@ -684,7 +713,7 @@ Provide your analysis in JSON format. Make your explanation comprehensive yet ac
             
             # 分析相关性
             try:
-                analysis = self.analyze_all_questions_for_paper(paper_id)
+                analysis = self.analyze_all_questions_for_paper(paper_id, is_own_work)
                 analysis_results[paper_id] = analysis
             except Exception as e:
                 print(f"⚠️  Error analyzing paper {paper_id}: {e}")
