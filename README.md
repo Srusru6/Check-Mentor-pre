@@ -1,6 +1,6 @@
 # 学术开盒 Demo (Academic Insight Extractor)
 
-本项目是一个演示程序，旨在通过分析一位教授的多篇学术论文，自动回答本科生在选择科研导师前最关心的几个核心问题。它利用大型语言模型（LLM）和检索增强生成（RAG）技术，从非结构化的论文文本中提取、分析并合成有价值的信息。
+本项目是一个演示程序，旨在通过分析一位教授的多篇学术论文，自动回答本科生在选择科研导师前最关心的几个核心问题。它利用大型语言模型（LLM）对非结构化的论文文本进行批量分析、提取与信息合成。
 
 ## 核心目标
 
@@ -20,20 +20,24 @@
 
 ## 技术栈
 - **语言**: Python 3.10+
-- **核心框架**: LangChain (用于构建 RAG 流程)
-- **语言模型**: OpenAI GPT 系列或任何兼容 OpenAI API 接口的模型
+- **核心框架**: LangChain (用于编排 LLM 工作流)
+- **语言模型**:
+  - 主要模型: OpenAI GPT 系列或任何兼容 OpenAI API 接口的模型 (如 DeepSeek)。
+  - 备用模型: 阿里云通义千问 (通过 DashScope)。
+- **核心库**: `langchain`, `openai`, `dashscope`, `python-dotenv`, `tqdm`
 
 ## 项目结构
 
 ```
 .
+├── cache/                  # 缓存目录，存储工作流的中间结果
 ├── core/                   # 核心逻辑模块
 │   ├── workflows/          # 各个问题的工作流
 │   │   ├── workflow_contribution.py
 │   │   ├── workflow_field_problems.py
 │   │   └── workflow_undergrad_projects.py
 │   ├── config.py           # 从 .env 加载配置
-│   ├── data_manager.py     # 管理 JSON 数据的读写
+│   ├── data_manager.py     # 管理 JSON 格式的缓存数据
 │   ├── final_analysis.py   # 生成最终综合报告
 │   └── workflow_orchestrator.py # 工作流编排器
 ├── data/                   # 输入数据
@@ -64,7 +68,7 @@
     python -m venv .venv
 
     # 激活虚拟环境 (Windows PowerShell)
-    .\.venv\Scripts\Activate.ps1
+    ./.venv/Scripts/Activate.ps1
     
     # 激活虚拟环境 (macOS/Linux)
     # source .venv/bin/activate
@@ -97,7 +101,34 @@
     - 将整理好的论文（`.md` 格式）放入对应的文件夹中。
 
 2.  **执行程序**
-    - 在项目根目录下，通过命令行运行 `main.py`。
+    - 在项目根目录下，通过命令行运行 `main.py`，并使用 `--target` 参数指定目标教授的姓名。
+    - 最终报告将生成在 `output/` 目录下，并命名为 `[教授姓名]_final_report.md`。
+
+    **完整命令示例:**
+    ```bash
+    python main.py --target "王剑威"
+    ```
+
+    **测试模式:**
+    - 如果你只想快速验证程序流程，可以添加 `--test-mode` 标志。该模式下，程序将只处理每个数据文件夹下的少量论文。
+    ```bash
+    python main.py --target "王剑威" --test-mode
+    ```
+
+## 工作原理简介
+
+本程序的工作流程如下：
+
+1.  **数据加载**: 程序首先根据你提供的教授姓名，在 `data/` 目录中找到对应的论文文件（`.md` 格式）。
+2.  **工作流编排**: `WorkflowOrchestrator` 启动，依次执行三个核心分析工作流：
+    - **贡献分析**: 分析 `main/` 目录下的论文，总结教授的核心研究贡献。
+    - **领域问题分析**: 分析 `main/` 和 `ref1/` 目录下的论文，识别该领域的前沿热点。
+    - **本科生项目分析**: 分析 `ref1/` 和 `ref2/` 目录下的论文，提出适合本科生参与的项目建议。
+3.  **LLM 分析**: 每个工作流将论文内容发送给大型语言模型（LLM），并根据精心设计的指令（Prompt）提取结构化信息。
+4.  **缓存机制**: 所有 LLM 的分析结果都会被缓存在 `cache/` 目录下的 JSON 文件中。当再次运行程序时，已分析过的论文将被跳过，从而节省时间和 API 调用成本。
+5.  **报告生成**: 所有工作流完成后，`FinalAnalyzer` 会将各部分的分析结果汇总，生成一份结构清晰、内容连贯的 Markdown 格式报告，并将其翻译为中文。
+
+这个架构使得分析流程模块化，并且易于扩展和维护。
 
     - **完整运行**:
       使用 `--target` 参数指定要分析的教授姓名。程序将处理该教授对应的所有数据。
@@ -116,4 +147,3 @@
 ## 输出说明
 
 - 程序执行完毕后，一份详细的 Markdown 格式分析报告将保存在 `output/` 目录下，文件名类似于 `王剑威_final_report.md`。
-- 包含所有工作流产出的结构化数据的 JSON 文件也会保存在 `output/` 目录下，文件名类似于 `王剑威_research_data.json`，供进一步分析使用。
