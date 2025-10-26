@@ -60,12 +60,7 @@ Provide a JSON response with the following structure:
         parser = JsonOutputParser()
         chain = prompt | self.llm | parser
 
-        # 为了避免 API 调用，暂时注释掉并返回占位符
-        # analysis_result = chain.invoke({"paper_content": paper_content[:12000]})
-        analysis_result = {
-            "research_area": "占位符研究领域",
-            "core_contribution": "占位符核心贡献：提出了一种新的方法/模型/理论。"
-        }
+        analysis_result = chain.invoke({"paper_content": paper_content[:12000]})
         
         return analysis_result
 
@@ -89,10 +84,8 @@ Synthesized Summary:""")
 
         analyses_json_str = json.dumps(all_analyses, indent=2, ensure_ascii=False)
 
-        # 为了避免 API 调用，暂时注释掉并返回占位符
-        # synthesis_result = chain.invoke({"analyses_json": analyses_json_str})
-        # return synthesis_result.content
-        return "此部分为综合总结占位符。基于对多篇代表作的分析，该教授的核心研究领域似乎集中在 [占位符领域1] 和 [占位符领域2]。他/她的主要贡献在于 [占位符贡献总结]。"
+        synthesis_result = chain.invoke({"analyses_json": analyses_json_str})
+        return synthesis_result.content
 
 
     def run(self, main_papers: List[Dict[str, Any]]) -> Dict[str, Any]:

@@ -1,4 +1,5 @@
 import os
+import argparse
 import uuid
 from pathlib import Path
 from typing import List, Dict, Any
@@ -84,6 +85,10 @@ def main(professor_name: str, test_mode: bool):
 
 
 if __name__ == "__main__":
-    # 在实际使用中，可以更改为目标教授的姓名
-    # The professor's name can be changed for actual use.
-    main(professor_name="测试教授", test_mode=True)
+    parser = argparse.ArgumentParser(description="学术开盒demo - 分析指定教授的学术贡献。")
+    parser.add_argument("professor_name", type=str, help="要分析的教授姓名。")
+    parser.add_argument("--no-test-mode", action="store_false", dest="test_mode", help="使用此标志以禁用测试模式并使用真实数据路径。")
+    
+    args = parser.parse_args()
+
+    main(professor_name=args.professor_name, test_mode=args.test_mode)

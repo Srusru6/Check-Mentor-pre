@@ -61,13 +61,7 @@ Provide a JSON response with the following structure:
         parser = JsonOutputParser()
         chain = prompt | self.llm | parser
 
-        # 为了避免 API 调用，暂时注释掉并返回占位符
-        # rating_result = chain.invoke({"paper_content": paper_content[:12000]})
-        rating_result = {
-            "problem_representativeness_score": 8, # 占位分数
-            "justification": "占位理由：该论文直接解决了其领域内的一个关键挑战。",
-            "identified_problem": "占位符问题"
-        }
+        rating_result = chain.invoke({"paper_content": paper_content[:12000]})
         
         return rating_result
 
@@ -91,10 +85,8 @@ Synthesized Summary of Hot Topics:""")
 
         papers_json_str = json.dumps(rated_papers, indent=2, ensure_ascii=False)
 
-        # 为了避免 API 调用，暂时注释掉并返回占位符
-        # synthesis_result = chain.invoke({"papers_json": papers_json_str})
-        # return synthesis_result.content
-        return "此部分为热点问题综合总结占位符。基于对高分论文的分析，当前该领域的热点问题包括 [占位符热点1] 和 [占位符热点2]。这些问题之所以重要，是因为 [占位符原因总结]。"
+        synthesis_result = chain.invoke({"papers_json": papers_json_str})
+        return synthesis_result.content
 
     def run(self, main_papers: List[Dict[str, Any]], ref1_papers: List[Dict[str, Any]]) -> Dict[str, Any]:
         """

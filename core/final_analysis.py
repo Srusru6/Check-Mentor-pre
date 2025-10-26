@@ -77,21 +77,7 @@ class FinalAnalyzer:
         # 使用模板格式化输入
         prompt = ChatPromptTemplate.from_template(templates.FINAL_SYNTHESIS_TEMPLATE)
         
-        # 为了避免 API 调用，暂时注释掉并返回占位符
-        # messages = prompt.format_messages(
-        #     professor_name=self.professor_name,
-        #     contribution_summary=contribution_summary,
-        #     contribution_details=contribution_details,
-        #     field_problems_summary=field_problems_summary,
-        #     field_problems_details=field_problems_details,
-        #     undergrad_projects_summary=undergrad_projects_summary,
-        #     undergrad_projects_details=undergrad_projects_details
-        # )
-        # response = self.llm.invoke(messages)
-        # final_report_content = response.content
-
-        # --- 占位符逻辑 ---
-        final_report_content = templates.FINAL_SYNTHESIS_TEMPLATE.format(
+        messages = prompt.format_messages(
             professor_name=self.professor_name,
             contribution_summary=contribution_summary,
             contribution_details=contribution_details,
@@ -100,7 +86,8 @@ class FinalAnalyzer:
             undergrad_projects_summary=undergrad_projects_summary,
             undergrad_projects_details=undergrad_projects_details
         )
-        # --- 占位符逻辑结束 ---
+        response = self.llm.invoke(messages)
+        final_report_content = response.content
         
         print("  -> Final report generated.")
         return final_report_content

@@ -61,13 +61,7 @@ Provide a JSON response with the following structure:
         parser = JsonOutputParser()
         chain = prompt | self.llm | parser
 
-        # 为了避免 API 调用，暂时注释掉并返回占位符
-        # evaluation_result = chain.invoke({"paper_content": paper_content[:12000]})
-        evaluation_result = {
-            "complexity_score": 6, # 占位分数
-            "friendliness_score": 7, # 占位分数
-            "project_idea": "占位项目点子：复现论文中的某个关键实验或仿真。"
-        }
+        evaluation_result = chain.invoke({"paper_content": paper_content[:12000]})
         
         return evaluation_result
 
@@ -91,10 +85,8 @@ Synthesized Summary of Project Suggestions:""")
 
         papers_json_str = json.dumps(suitable_papers, indent=2, ensure_ascii=False)
 
-        # 为了避免 API 调用，暂时注释掉并返回占位符
-        # synthesis_result = chain.invoke({"papers_json": papers_json_str})
-        # return synthesis_result.content
-        return "此部分为本科生项目建议综合总结占位符。基于对相关文献的评估，我们发现以下几个方向非常适合本科生进行初步的科研探索：[占位符方向1] 和 [占位符方向2]。这些项目不仅能帮助学生掌握前沿知识，还能锻炼关键的实验或编程能力。"
+        synthesis_result = chain.invoke({"papers_json": papers_json_str})
+        return synthesis_result.content
 
     def run(self, ref1_papers: List[Dict[str, Any]], ref2_papers: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
