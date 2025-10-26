@@ -1,19 +1,53 @@
 import json
 from typing import Dict, Any, List
 from . import config
+from langchain_core.prompts import ChatPromptTemplate
 
 class FinalAnalyzer:
     """
     负责将所有工作流的分析结果整合成一份最终的、连贯的报告。
+    同时负责将报告翻译为指定语言。
     """
-    def __init__(self, professor_name: str):
+    def __init__(self, professor_name: str, llm=None):
         """
         初始化最终分析器。
 
         Args:
             professor_name (str): 教授姓名。
+            llm: 用于翻译的语言模型实例。
         """
         self.professor_name = professor_name
+        self.llm = llm
+
+    def translate_report(self, report_content: str, target_language: str = "Chinese") -> str:
+        """
+        将报告内容翻译成指定语言。
+        """
+        if not self.llm:
+            print("  -> Translator LLM not provided. Skipping translation.")
+            return report_content
+
+        print(f"  -> Translating report to {target_language}...")
+        
+        prompt = ChatPromptTemplate.from_template(
+            "You are a professional translator. Translate the following academic analysis report into {language}. "
+            "Preserve the original Markdown formatting, including headers, lists, and bold text. "
+            "Do not add any comments or extra text outside of the translated content.\n\n"
+            "Report to translate:\n\n---\n{report}\n---"
+        )
+        
+        chain = prompt | self.llm
+        
+        try:
+            translated_result = chain.invoke({
+                "language": target_language,
+                "report": report_content
+            })
+            print("  -> Translation successful.")
+            return translated_result.content
+        except Exception as e:
+            print(f"  ⚠️ Error during translation: {e}. Returning original report.")
+            return report_content
 
     def generate_final_report(self, results: Dict[str, Any]) -> str:
         """

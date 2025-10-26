@@ -63,8 +63,8 @@ class WorkflowOrchestrator:
         self.field_problems_workflow = FieldProblemsWorkflow(main_llm, fallback_llm)
         self.undergrad_projects_workflow = UndergradProjectsWorkflow(main_llm, fallback_llm)
         
-        # 3. 初始化最终分析器
-        self.final_analyzer = FinalAnalyzer(self.professor_name)
+        # 3. 初始化最终分析器，并注入LLM用于翻译
+        self.final_analyzer = FinalAnalyzer(self.professor_name, main_llm)
         
         config.validate_config()
         print("✅ Orchestrator initialized successfully.")
@@ -106,14 +106,19 @@ class WorkflowOrchestrator:
         self._print_section_header("任务一：准备和分离论文数据源", level=2)
         
         limit = config.TEST_MODE_PAPER_LIMIT if self.test_mode else 0
-        if self.test_mode:
-            print(f"  -> 运行在测试模式，每个数据源最多处理 {limit} 篇论文。")
-
         base_data_path = Path(f"data/{self.professor_name}")
         
-        main_papers = self._load_papers_from_dir(str(base_data_path / "main"), self.professor_name, limit)
-        ref1_papers = self._load_papers_from_dir(str(base_data_path / "ref1"), "Various Authors", limit)
-        ref2_papers = self._load_papers_from_dir(str(base_data_path / "ref2"), "Various Authors", limit)
+        # 加载教授代表作 (main) - 始终完整加载
+        main_papers = self._load_papers_from_dir(str(base_data_path / "main"), self.professor_name)
+
+        if self.test_mode:
+            print(f"  -> 运行在测试模式: 教授代表作将完整加载 ({len(main_papers)}篇) 以保证分析准确性。")
+            print(f"  -> 其余数据源 (ref1, ref2) 最多处理 {limit} 篇论文。")
+            ref1_papers = self._load_papers_from_dir(str(base_data_path / "ref1"), "Various Authors", limit)
+            ref2_papers = self._load_papers_from_dir(str(base_data_path / "ref2"), "Various Authors", limit)
+        else:
+            ref1_papers = self._load_papers_from_dir(str(base_data_path / "ref1"), "Various Authors")
+            ref2_papers = self._load_papers_from_dir(str(base_data_path / "ref2"), "Various Authors")
 
         print("  -> 数据源分离完成:")
         print(f"    - 教授代表作 (main): {len(main_papers)} 篇")
@@ -136,19 +141,29 @@ class WorkflowOrchestrator:
 
         # --- 工作流3: 分析本科生可参与的项目 ---
         print("\n➡️ [Workflow 3/3] 分析本科生可参与的项目...")
-        undergrad_projects_results = self.undergrad_projects_workflow.run(self.professor_name, ref2_papers)
+        # 将工作流1的总结作为输入，传递给工作流3
+        contribution_summary = contribution_results.get("summary", "")
+        undergrad_projects_results = self.undergrad_projects_workflow.run(
+            self.professor_name, 
+            ref2_papers,
+            contribution_summary
+        )
         all_results['undergrad_projects_analysis'] = undergrad_projects_results
 
         print("\n--- 所有工作流执行完毕 ---\n")
 
         # 步骤 3: 整合结果并生成最终报告
         self._print_section_header("任务三：整合结果并生成最终报告", level=2)
-        final_report = self.final_analyzer.generate_final_report(all_results)
+        english_report = self.final_analyzer.generate_final_report(all_results)
 
-        # 步骤 4: 保存最终报告
+        # 步骤 4: 将报告翻译为中文
+        self._print_section_header("任务四：翻译报告为中文", level=2)
+        chinese_report = self.final_analyzer.translate_report(english_report, "Chinese")
+
+        # 步骤 5: 保存最终报告
         report_filename = config.OUTPUT_DIR / f"{self.professor_name}_final_report.md"
         with open(report_filename, 'w', encoding='utf-8') as f:
-            f.write(final_report)
+            f.write(chinese_report)
         print(f"\n✅ 最终报告已保存至: {report_filename}")
 
         self._print_section_header("学术开盒完成", level=1)
