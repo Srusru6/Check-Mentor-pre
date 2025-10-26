@@ -45,18 +45,22 @@ class UndergradProjectsWorkflow:
             print(f"    ⚠️ Error loading file {file_path}: {e}")
             return ""
 
-    def _invoke_llm_with_fallback(self, chain, paper_content):
+    def _invoke_llm_with_fallback(self, chain, paper_content, contribution_summary):
         """
         调用LLM，如果主LLM失败，则尝试备用LLM。
         """
+        input_data = {
+            "paper_content": paper_content[:12000],
+            "contribution_summary": contribution_summary
+        }
         try:
             # print("      -> Attempting main LLM...")
-            result = chain.invoke({"paper_content": paper_content[:12000]})
+            result = chain.invoke(input_data)
             return result
         except (OutputParserException, json.JSONDecodeError) as e:
             # print(f"      ⚠️ Main LLM output parsing failed: {e}. Retrying with main LLM...")
             try:
-                result = chain.invoke({"paper_content": paper_content[:12000]})
+                result = chain.invoke(input_data)
                 return result
             except Exception as final_e:
                 # print(f"      ⚠️ Main LLM retry failed: {final_e}.")
@@ -69,7 +73,7 @@ class UndergradProjectsWorkflow:
             try:
                 # print("      -> Attempting fallback LLM...")
                 fallback_chain = chain.with_components(llm=self.fallback_llm)
-                result = fallback_chain.invoke({"paper_content": paper_content[:12000]})
+                result = fallback_chain.invoke(input_data)
                 return result
             except Exception as e:
                 # print(f"      ⚠️ Fallback LLM also failed: {e}")
@@ -77,26 +81,58 @@ class UndergradProjectsWorkflow:
         
         return {"error": "Both main and fallback LLMs failed."}
 
-    def _evaluate_single_paper(self, paper_content: str) -> Dict[str, Any]:
+    def _evaluate_single_paper(self, paper_content: str, contribution_summary: str) -> Dict[str, Any]:
         """
-        使用 LLM 评估单篇论文，判断其“工作复杂度”和“本科生友好度”。
+        使用 LLM 评估单篇论文，基于四维模型进行打分。
         """
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are a harsh and strict professor evaluating research papers for potential undergraduate projects. Your standards are very high.
-Provide a JSON response with the following structure:
+            ("system", """You are an experienced professor evaluating papers for potential undergraduate research projects. Your goal is to find projects that are not only feasible but also relevant to your own research interests and valuable for a student's growth.
+
+You will be given a summary of your own core research contributions and the content of a candidate paper. You must evaluate the paper based on the following four criteria. Each score MUST be a float between 0.0 and 1.0.
+
+**Your Core Research Summary:**
+---
+{contribution_summary}
+---
+
+**Evaluation Criteria:**
+
+1.  **Topical Relevance (Weight: 40%)**: How closely does this paper's topic align with YOUR core research summary?
+    - 1.0: Directly related to a key theme in your summary.
+    - 0.5: Tangentially related, or on a neighboring topic.
+    - 0.0: Completely unrelated.
+
+2.  **Technical Accessibility (Weight: 25%)**: How feasible is it for an undergraduate to engage with the technical aspects?
+    - 1.0: Relies on standard undergraduate-level knowledge and common tools.
+    - 0.5: Requires some specialized knowledge, but it's learnable within a semester.
+    - 0.0: Requires deep, graduate-level expertise.
+
+3.  **Project Modularity (Weight: 20%)**: Can a well-defined, self-contained sub-project be carved out from this paper?
+    - 1.0: The paper's methods or components are clearly separable into smaller tasks (e.g., "reproduce figure 2," "implement algorithm X").
+    - 0.5: A sub-project is possible but requires careful definition by the mentor.
+    - 0.0: The work is monolithic and cannot be broken down.
+
+4.  **Educational Value (Weight: 15%)**: How much would a student learn by doing a project from this paper?
+    - 1.0: The project would teach fundamental skills and provide a "big picture" view of the field.
+    - 0.5: The project is a good learning experience for a specific skill.
+    - 0.0: The work is tedious, repetitive, or too narrow to be educationally valuable.
+
+Your final output MUST be a JSON object with the following structure:
 {{
-  "complexity_score": <A float score from 0.0 (very simple) to 1.0 (very complex) for the overall technical difficulty. Be critical and use the full range of the scale.>,
-  "friendliness_score": <A float score from 0.0 (very unfriendly) to 1.0 (very friendly) for undergraduate involvement, considering required background knowledge and feasibility. Be realistic about the challenges for undergraduates.>,
-  "project_idea": "<A concrete, one-sentence project idea for an undergraduate based on this paper. If not suitable, state 'Not suitable'.>"
+  "relevance_score": <float>,
+  "accessibility_score": <float>,
+  "modularity_score": <float>,
+  "educational_score": <float>,
+  "justification": "<A brief justification for your scores, referencing the four criteria.>",
+  "project_idea": "<A concrete, one-sentence project idea for an undergraduate. If not suitable, state 'Not suitable'.>"
 }}"""),
-            ("user", "Please evaluate the following paper content for undergraduate project suitability and provide the structured JSON output:\n\n---\n{paper_content}\n---")
+            ("user", "Please evaluate the following paper content for undergraduate project suitability and provide the structured JSON output:\n\n**Paper Content:**\n---\n{paper_content}\n---")
         ])
         
         parser = JsonOutputParser()
         chain = prompt | self.llm | parser
 
-        evaluation_result = self._invoke_llm_with_fallback(chain, paper_content)
-        # time.sleep(1) # Delay moved to the main loop
+        evaluation_result = self._invoke_llm_with_fallback(chain, paper_content, contribution_summary)
         
         return evaluation_result
 
@@ -123,7 +159,7 @@ Synthesized Summary of Project Suggestions:""")
         synthesis_result = chain.invoke({"papers_json": papers_json_str})
         return synthesis_result.content
 
-    def run(self, professor_name: str, ref2_papers: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def run(self, professor_name: str, ref2_papers: List[Dict[str, Any]], contribution_summary: str) -> Dict[str, Any]:
         """
         执行分析本科生项目的完整流程。
         """
@@ -138,6 +174,10 @@ Synthesized Summary of Project Suggestions:""")
                 "project_ideas": [],
                 "rated_papers": []
             }
+        
+        if not contribution_summary:
+            print("    ⚠️ Warning: Professor's contribution summary is empty. Topical relevance score may be inaccurate.")
+
 
         # 步骤1: 对每篇论文进行评估
         all_evaluated_papers = []
@@ -145,7 +185,11 @@ Synthesized Summary of Project Suggestions:""")
             paper_id = paper['id']
             cached_result = self.cache.get(
                 paper_id,
-                required_keys=["paper_id", "title", "project_idea", "complexity_score", "friendliness_score"]
+                required_keys=[
+                    "paper_id", "title", "project_idea", "justification",
+                    "relevance_score", "accessibility_score", "modularity_score", "educational_score",
+                    "weighted_score"
+                ]
             )
 
             if cached_result:
@@ -155,17 +199,26 @@ Synthesized Summary of Project Suggestions:""")
                 if not content:
                     continue
                 
-                evaluation_result = self._evaluate_single_paper(content)
+                evaluation_result = self._evaluate_single_paper(content, contribution_summary)
 
                 if evaluation_result.get("error"):
                     tqdm.write(f"    ⚠️ Skipped paper '{paper['title']}' due to LLM failure.")
                     continue
 
+                # 计算加权分数
+                r_score = evaluation_result.get("relevance_score", 0.0)
+                a_score = evaluation_result.get("accessibility_score", 0.0)
+                m_score = evaluation_result.get("modularity_score", 0.0)
+                e_score = evaluation_result.get("educational_score", 0.0)
+
+                weighted_score = (r_score * 0.4) + (a_score * 0.25) + (m_score * 0.2) + (e_score * 0.15)
+
                 # 构建完整的评估对象并缓存
                 evaluation = {
                     **evaluation_result,
                     'paper_id': paper_id,
-                    'title': paper['title']
+                    'title': paper['title'],
+                    'weighted_score': round(weighted_score, 4)
                 }
                 self.cache.set(paper_id, evaluation)
                 time.sleep(1) # Delay after successful API call
@@ -180,11 +233,11 @@ Synthesized Summary of Project Suggestions:""")
                 "rated_papers": []
             }
 
-        # 步骤2: 筛选合适的论文 (复杂度适中，友好度较高)
+        # 步骤2: 筛选合适的论文
+        high_score_threshold = 0.5 # Adjusted threshold for the new weighted score
         suitable_papers = [
             p for p in all_evaluated_papers 
-            if 0.4 <= p.get("complexity_score", 0.0) <= 0.8 
-            and p.get("friendliness_score", 0.0) >= 0.6
+            if p.get("weighted_score", 0.0) >= high_score_threshold
         ]
         print(f"\n    -> Found {len(suitable_papers)} suitable papers for undergraduate projects.")
 
@@ -202,7 +255,7 @@ Synthesized Summary of Project Suggestions:""")
             ]
         else:
             print("    -> No suitable papers found. Cannot synthesize project suggestions.")
-            summary = "没有发现难度适中且适合本科生参与的论文，无法提供具体的项目建议。"
+            summary = "没有发现与教授研究方向相关、且适合本科生参与的论文，无法提供具体的项目建议。"
             project_ideas = []
 
         # 步骤4: 格式化最终输出
@@ -213,8 +266,14 @@ Synthesized Summary of Project Suggestions:""")
                 {
                     "paper_id": p['paper_id'],
                     "title": p['title'],
-                    "complexity_score": p.get('complexity_score', 'N/A'),
-                    "friendliness_score": p.get('friendliness_score', 'N/A')
+                    "score": p.get('weighted_score', 'N/A'),
+                    "details": {
+                        "relevance": p.get('relevance_score', 'N/A'),
+                        "accessibility": p.get('accessibility_score', 'N/A'),
+                        "modularity": p.get('modularity_score', 'N/A'),
+                        "education": p.get('educational_score', 'N/A')
+                    },
+                    "justification": p.get('justification', 'N/A')
                 }
                 for p in all_evaluated_papers
             ]

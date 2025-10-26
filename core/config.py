@@ -14,7 +14,7 @@ PROJECT_NAME = "学术开盒 - Check-Mentor"
 PROJECT_VERSION = "1.0"
 
 # 测试模式配置
-TEST_MODE_PAPER_LIMIT = 2
+TEST_MODE_PAPER_LIMIT = 5
 
 # API 配置
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")

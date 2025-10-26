@@ -81,18 +81,42 @@ class FieldProblemsWorkflow:
 
     def _rate_single_paper(self, paper_content: str) -> Dict[str, Any]:
         """
-        使用 LLM 评估单篇论文，判断其“领域问题代表性”并打分。
+        使用 LLM 评估单篇论文，基于四维模型进行打分。
         """
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an expert academic reviewer, acting as a demanding panelist for a top-tier conference. You are evaluating a series of high-quality papers from the same field. Your task is to provide a fine-grained evaluation of each paper's relevance to the core problems in its field.
+            ("system", """You are a top-tier academic reviewer analyzing papers to map out a field's hot topics. Your evaluation must be structured, critical, and forward-looking.
 
-You MUST use the full 0.0 to 1.0 floating-point range to distinguish between papers. A score of 0.5 represents an average paper. Only papers that are exceptionally representative of a core field problem should receive a score close to 1.0.
+For each paper, you will provide a multi-dimensional evaluation based on the following four criteria. Each score MUST be a float between 0.0 and 1.0.
 
-Provide a JSON response with the following structure:
+1.  **Significance (Weight: 40%)**: How important is the core problem this paper addresses?
+    - 1.0: A foundational, field-defining problem.
+    - 0.5: A known, important sub-problem.
+    - 0.1: A niche or minor issue.
+
+2.  **Novelty (Weight: 20%)**: How original is the paper's proposed SOLUTION or METHOD?
+    - 1.0: A completely new paradigm or technique.
+    - 0.5: An incremental improvement on existing methods.
+    - 0.1: A standard application of known methods.
+    - Note: For review papers that don't propose new solutions, this score will naturally be low.
+
+3.  **Clarity (Weight: 20%)**: How well does the paper DEFINE and STRUCTURE the problem space?
+    - 1.0: Provides a new, clarifying framework or taxonomy for the field. (Typical for excellent review papers).
+    - 0.5: Clearly defines the specific problem it tackles. (Typical for good research papers).
+    - 0.1: The problem definition is unclear or buried.
+
+4.  **Potential (Weight: 20%)**: How much future research could this paper inspire?
+    - 1.0: Opens up entirely new research avenues or questions.
+    - 0.5: Suggests clear next steps and has good potential for follow-up work.
+    - 0.1: The work feels self-contained or addresses a problem that is largely "solved".
+
+Your final output MUST be a JSON object with the following structure:
 {{
-  "problem_representativeness_score": <A float score between 0.0 and 1.0>,
-  "justification": "<A brief justification for your score, explaining what core problem the paper addresses and why it received this specific score.>",
-  "identified_problem": "<A concise phrase identifying the core problem or question, e.g., 'scalable quantum entanglement', 'reducing photonic circuit loss'>"
+  "significance_score": <float>,
+  "novelty_score": <float>,
+  "clarity_score": <float>,
+  "potential_score": <float>,
+  "justification": "<A brief, insightful justification for your scores, referencing the four criteria.>",
+  "identified_problem": "<A concise phrase for the core problem, e.g., 'scalable quantum entanglement'>"
 }}"""),
             ("user", "Please evaluate the following paper content and provide the structured JSON output:\n\n---\n{paper_content}\n---")
         ])
@@ -101,7 +125,6 @@ Provide a JSON response with the following structure:
         chain = prompt | self.llm | parser
 
         rating_result = self._invoke_llm_with_fallback(chain, paper_content)
-        # time.sleep(1) # Delay moved to the main loop
         
         return rating_result
 
@@ -258,7 +281,11 @@ Instructions:
             paper_id = paper['id']
             cached_result = self.cache.get(
                 paper_id,
-                required_keys=["paper_id", "title", "justification", "identified_problem", "problem_representativeness_score"]
+                required_keys=[
+                    "paper_id", "title", "justification", "identified_problem",
+                    "significance_score", "novelty_score", "clarity_score", "potential_score",
+                    "weighted_score"
+                ]
             )
 
             if cached_result:
@@ -274,11 +301,20 @@ Instructions:
                     tqdm.write(f"    ⚠️ Skipped paper '{paper['title']}' due to LLM failure.")
                     continue
                 
+                # 计算加权分数
+                s_score = rating_result.get("significance_score", 0.0)
+                n_score = rating_result.get("novelty_score", 0.0)
+                c_score = rating_result.get("clarity_score", 0.0)
+                p_score = rating_result.get("potential_score", 0.0)
+                
+                weighted_score = (s_score * 0.4) + (n_score * 0.2) + (c_score * 0.2) + (p_score * 0.2)
+
                 # 构建完整的评分对象并缓存
                 rating = {
                     **rating_result,
                     'paper_id': paper_id,
-                    'title': paper['title']
+                    'title': paper['title'],
+                    'weighted_score': round(weighted_score, 4)
                 }
                 self.cache.set(paper_id, rating)
                 time.sleep(1) # Delay after successful API call
@@ -294,8 +330,8 @@ Instructions:
             }
 
         # 步骤2: 筛选高分论文
-        high_score_threshold = 0.7
-        high_score_papers = [p for p in all_rated_papers if p.get("problem_representativeness_score", 0.0) >= high_score_threshold]
+        high_score_threshold = 0.6 # Adjusted threshold for the new weighted score
+        high_score_papers = [p for p in all_rated_papers if p.get("weighted_score", 0.0) >= high_score_threshold]
         print(f"\n    -> Found {len(high_score_papers)} papers with score >= {high_score_threshold}.")
 
         # 步骤3: Map-Reduce综合高分论文，提炼热点问题
@@ -340,7 +376,13 @@ Instructions:
                 {
                     "paper_id": p['paper_id'],
                     "title": p['title'],
-                    "score": p.get('problem_representativeness_score', 'N/A'),
+                    "score": p.get('weighted_score', 'N/A'),
+                    "details": {
+                        "significance": p.get('significance_score', 'N/A'),
+                        "novelty": p.get('novelty_score', 'N/A'),
+                        "clarity": p.get('clarity_score', 'N/A'),
+                        "potential": p.get('potential_score', 'N/A')
+                    },
                     "justification": p.get('justification', 'N/A')
                 }
                 for p in all_rated_papers
