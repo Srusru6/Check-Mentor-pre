@@ -12,6 +12,7 @@ Workflow 3: 分析本科生可参与的项目
 import json
 import time
 from typing import List, Dict, Any
+from tqdm import tqdm
 
 from langchain_openai import ChatOpenAI
 from langchain_community.chat_models import ChatTongyi
@@ -64,14 +65,15 @@ class UndergradProjectsWorkflow:
 
         if self.fallback_llm:
             try:
-                print("      -> Attempting fallback LLM...")
+                # print("      -> Attempting fallback LLM...")
                 fallback_chain = chain.with_components(llm=self.fallback_llm)
                 result = fallback_chain.invoke({"paper_content": paper_content[:12000]})
                 return result
             except Exception as e:
-                print(f"      ⚠️ Fallback LLM also failed: {e}")
+                # print(f"      ⚠️ Fallback LLM also failed: {e}")
+                pass
         
-        raise RuntimeError("Both main and fallback LLMs failed to process the paper.")
+        return {"error": "Both main and fallback LLMs failed."}
 
     def _evaluate_single_paper(self, paper_content: str) -> Dict[str, Any]:
         """
@@ -92,7 +94,7 @@ Provide a JSON response with the following structure:
         chain = prompt | self.llm | parser
 
         evaluation_result = self._invoke_llm_with_fallback(chain, paper_content)
-        time.sleep(1) # Add a delay to avoid rate limiting
+        # time.sleep(1) # Delay moved to the main loop
         
         return evaluation_result
 
@@ -137,25 +139,37 @@ Synthesized Summary of Project Suggestions:""")
 
         # 步骤1: 对每篇论文进行评估
         all_evaluated_papers = []
-        for paper in all_papers:
+        for paper in tqdm(all_papers, desc="  -> Evaluating undergrad projects"):
             paper_id = paper['id']
             cached_result = self.cache.get(paper_id)
 
             if cached_result:
-                print(f"    -> Found cached evaluation for paper: {paper['title']}")
                 evaluation = cached_result
             else:
-                print(f"    -> Evaluating paper: {paper['title']}")
                 content = self._load_paper_content(paper['md_filename'])
                 if not content:
                     continue
                 
                 evaluation = self._evaluate_single_paper(content)
+
+                if evaluation.get("error"):
+                    tqdm.write(f"    ⚠️ Skipped paper '{paper['title']}' due to LLM failure.")
+                    continue
+
                 self.cache.set(paper_id, evaluation)
+                time.sleep(1) # Delay after successful API call
 
             evaluation['paper_id'] = paper_id
             evaluation['title'] = paper['title']
             all_evaluated_papers.append(evaluation)
+
+        if not all_evaluated_papers:
+            print("\n  -> No papers were successfully evaluated. Skipping synthesis.")
+            return {
+                "summary": "所有论文均未能成功评估，无法分析本科生可参与的项目。",
+                "project_ideas": [],
+                "rated_papers": []
+            }
 
         # 步骤2: 筛选合适的论文 (复杂度适中，友好度较高)
         suitable_papers = [
@@ -163,7 +177,7 @@ Synthesized Summary of Project Suggestions:""")
             if 4 <= p.get("complexity_score", 0) <= 8 
             and p.get("friendliness_score", 0) >= 6
         ]
-        print(f"    -> Found {len(suitable_papers)} suitable papers for undergraduate projects.")
+        print(f"\n    -> Found {len(suitable_papers)} suitable papers for undergraduate projects.")
 
         # 步骤3: 综合项目建议
         if suitable_papers:

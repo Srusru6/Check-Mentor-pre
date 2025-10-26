@@ -12,6 +12,7 @@ Workflow 1: 分析教授的核心贡献
 import json
 import time
 from typing import List, Dict, Any
+from tqdm import tqdm
 
 from langchain_openai import ChatOpenAI
 from langchain_community.chat_models import ChatTongyi
@@ -69,15 +70,16 @@ class ContributionWorkflow:
         # 如果主LLM失败，且备用LLM已配置，则尝试备用LLM
         if self.fallback_llm:
             try:
-                print("      -> Attempting fallback LLM...")
+                # print("      -> Attempting fallback LLM...") # 进度条模式下静默
                 fallback_chain = chain.with_components(llm=self.fallback_llm)
                 result = fallback_chain.invoke({"paper_content": paper_content[:12000]})
                 return result
             except Exception as e:
-                print(f"      ⚠️ Fallback LLM also failed: {e}")
+                # print(f"      ⚠️ Fallback LLM also failed: {e}") # 进度条模式下静默
+                pass # 允许循环继续，最终在外部处理错误
         
-        # 如果都失败了，则抛出异常
-        raise RuntimeError("Both main and fallback LLMs failed to process the paper.")
+        # 如果都失败了，则返回一个错误标记
+        return {"error": "Both main and fallback LLMs failed."}
 
 
     def _analyze_single_paper(self, paper_content: str) -> Dict[str, Any]:
@@ -98,7 +100,9 @@ Provide a JSON response with the following structure:
         chain = prompt | self.llm | parser
 
         analysis_result = self._invoke_llm_with_fallback(chain, paper_content)
-        time.sleep(1) # Add a delay to avoid rate limiting
+        # 在进度条模式下，单个请求的延迟可以适当缩短或移除，
+        # 因为总体速率由循环控制
+        # time.sleep(1) 
         
         return analysis_result
 
@@ -143,28 +147,44 @@ Synthesized Summary:""")
 
         # 步骤1: 对每篇论文进行单独分析
         all_single_analyses = []
-        for paper in main_papers:
+        
+        # 使用tqdm创建进度条
+        for paper in tqdm(main_papers, desc="  -> Analyzing contributions"):
             paper_id = paper['id']
             cached_result = self.cache.get(paper_id)
 
             if cached_result:
-                print(f"    -> Found cached analysis for paper: {paper['title']}")
                 single_analysis = cached_result
             else:
-                print(f"    -> Analyzing paper: {paper['title']}")
                 content = self._load_paper_content(paper['md_filename'])
                 if not content:
                     continue
                 
                 single_analysis = self._analyze_single_paper(content)
+                
+                # 检查LLM调用是否出错
+                if single_analysis.get("error"):
+                    tqdm.write(f"    ⚠️ Skipped paper '{paper['title']}' due to LLM failure.")
+                    continue
+
                 self.cache.set(paper_id, single_analysis)
+                time.sleep(1) # 在成功调用后保留延迟，避免API超速
 
             single_analysis['paper_id'] = paper_id
             single_analysis['title'] = paper['title']
             all_single_analyses.append(single_analysis)
 
+        # 检查是否有任何论文被成功分析
+        if not all_single_analyses:
+            print("  -> No papers were successfully analyzed. Skipping synthesis.")
+            return {
+                "summary": "所有论文均未能成功分析，无法生成总结。",
+                "research_areas": [],
+                "key_contributions": []
+            }
+
         # 步骤2: 综合所有分析结果
-        print("    -> Synthesizing all results...")
+        print("\n    -> Synthesizing all results...")
         final_summary = self._synthesize_results(all_single_analyses)
 
         # 步骤3: 格式化最终输出

@@ -14,6 +14,7 @@ import time
 import re
 from collections import defaultdict
 from typing import List, Dict, Any
+from tqdm import tqdm
 
 from langchain_openai import ChatOpenAI
 from langchain_community.chat_models import ChatTongyi
@@ -66,14 +67,15 @@ class FieldProblemsWorkflow:
 
         if self.fallback_llm:
             try:
-                print("      -> Attempting fallback LLM...")
+                # print("      -> Attempting fallback LLM...")
                 fallback_chain = chain.with_components(llm=self.fallback_llm)
                 result = fallback_chain.invoke({"paper_content": paper_content[:12000]})
                 return result
             except Exception as e:
-                print(f"      ⚠️ Fallback LLM also failed: {e}")
+                # print(f"      ⚠️ Fallback LLM also failed: {e}")
+                pass
         
-        raise RuntimeError("Both main and fallback LLMs failed to process the paper.")
+        return {"error": "Both main and fallback LLMs failed."}
 
     def _rate_single_paper(self, paper_content: str) -> Dict[str, Any]:
         """
@@ -94,7 +96,7 @@ Provide a JSON response with the following structure:
         chain = prompt | self.llm | parser
 
         rating_result = self._invoke_llm_with_fallback(chain, paper_content)
-        time.sleep(1) # Add a delay to avoid rate limiting
+        # time.sleep(1) # Delay moved to the main loop
         
         return rating_result
 
@@ -104,7 +106,7 @@ Provide a JSON response with the following structure:
         使用简单的关键词匹配来聚合相似问题。
         """
         print("      -> Grouping papers by identified problem...")
-        
+
         # 提取核心词作为分组依据，忽略常见的、非描述性的词语
         stop_words = {'and', 'the', 'of', 'in', 'a', 'for', 'with', 'on', 'to', 'from', 'by'}
         
@@ -215,30 +217,42 @@ Synthesized Summary of Hot Topics:""")
 
         # 步骤1: 对每篇论文进行评分
         all_rated_papers = []
-        for paper in all_papers:
+        for paper in tqdm(all_papers, desc="  -> Rating field problem papers"):
             paper_id = paper['id']
             cached_result = self.cache.get(paper_id)
 
             if cached_result:
-                print(f"    -> Found cached rating for paper: {paper['title']}")
                 rating = cached_result
             else:
-                print(f"    -> Rating paper: {paper['title']}")
                 content = self._load_paper_content(paper['md_filename'])
                 if not content:
                     continue
                 
                 rating = self._rate_single_paper(content)
+
+                if rating.get("error"):
+                    tqdm.write(f"    ⚠️ Skipped paper '{paper['title']}' due to LLM failure.")
+                    continue
+                
                 self.cache.set(paper_id, rating)
+                time.sleep(1) # Delay after successful API call
 
             rating['paper_id'] = paper_id
             rating['title'] = paper['title']
             all_rated_papers.append(rating)
 
+        if not all_rated_papers:
+            print("\n  -> No papers were successfully rated. Skipping synthesis.")
+            return {
+                "summary": "所有论文均未能成功评分，无法分析领域热点问题。",
+                "hot_topics": [],
+                "rated_papers": []
+            }
+
         # 步骤2: 筛选高分论文
         high_score_threshold = 7
         high_score_papers = [p for p in all_rated_papers if p.get("problem_representativeness_score", 0) >= high_score_threshold]
-        print(f"    -> Found {len(high_score_papers)} papers with score >= {high_score_threshold}.")
+        print(f"\n    -> Found {len(high_score_papers)} papers with score >= {high_score_threshold}.")
 
         # 步骤3: Map-Reduce综合高分论文，提炼热点问题
         if high_score_papers:

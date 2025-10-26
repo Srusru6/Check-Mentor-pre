@@ -18,10 +18,12 @@ pypdf>=4.0.0
 unstructured>=0.10.0
 markdown>=3.5.0
 
-# Environment & Utilities
+# Utilities
 python-dotenv>=1.0.0
+tqdm>=4.66.0
+
+# Environment & Utilities
 requests>=2.31.0
 beautifulsoup4>=4.12.0
-tqdm>=4.66.0
 typing-extensions>=4.5.0
 pydantic>=2.0.0
