@@ -84,11 +84,14 @@ class FieldProblemsWorkflow:
         使用 LLM 评估单篇论文，判断其“领域问题代表性”并打分。
         """
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an expert academic reviewer. Your task is to evaluate a research paper based on its relevance to core problems in its field.
+            ("system", """You are an expert academic reviewer, acting as a demanding panelist for a top-tier conference. You are evaluating a series of high-quality papers from the same field. Your task is to provide a fine-grained evaluation of each paper's relevance to the core problems in its field.
+
+You MUST use the full 0.0 to 1.0 floating-point range to distinguish between papers. A score of 0.5 represents an average paper. Only papers that are exceptionally representative of a core field problem should receive a score close to 1.0.
+
 Provide a JSON response with the following structure:
 {{
-  "problem_representativeness_score": <An integer score from 1 (not representative) to 10 (highly representative)>,
-  "justification": "<A brief justification for your score, explaining what core problem the paper addresses.>",
+  "problem_representativeness_score": <A float score between 0.0 and 1.0>,
+  "justification": "<A brief justification for your score, explaining what core problem the paper addresses and why it received this specific score.>",
   "identified_problem": "<A concise phrase identifying the core problem or question, e.g., 'scalable quantum entanglement', 'reducing photonic circuit loss'>"
 }}"""),
             ("user", "Please evaluate the following paper content and provide the structured JSON output:\n\n---\n{paper_content}\n---")
@@ -174,32 +177,64 @@ Group Summary:""")
         time.sleep(1) # Add a delay
         return summary
 
-    def _synthesize_final_summary(self, group_summaries: List[str]) -> str:
+    def _synthesize_final_summary(self, group_summaries: List[str], paper_groups: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Any]:
         """
-        (Final Synthesis Step) 基于所有小组的总结，生成最终的综合报告。
+        (Final Synthesis Step) 基于所有小组的总结，生成最终的综合报告和结构化的热点列表。
         """
-        print("    -> Synthesizing final summary from group summaries...")
-        prompt = ChatPromptTemplate.from_template("""You are a senior research analyst. You have been given summaries from several clusters of research papers. Your task is to synthesize these into a single, coherent overview of the field's hot topics.
+        print("    -> Synthesizing final summary and hot topics from group summaries...")
+        
+        # 创建一个从 group_key 到相关论文标题的映射
+        group_key_to_papers = {
+            key: [p.get('title', 'N/A') for p in papers] 
+            for key, papers in paper_groups.items()
+        }
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are a senior research analyst. You have been given summaries from several clusters of research papers. Your task is to synthesize these into a single, coherent overview of the field's hot topics.
 
 The summaries for each research cluster are provided below:
 ---
 {group_summaries_text}
 ---
 
-Your final synthesis should:
-1.  Identify and list 2-4 main hot topics or core problems that emerge from the collective summaries.
-2.  Provide a brief, coherent narrative explaining what these hot topics are, how they relate to each other, and why they are important for the field.
-3.  **Integrate insights from the summaries, preserving any mentioned novel or unique points.** For instance, if a summary mentions an outlier idea, ensure it is reflected in the final report as a potential emerging trend.
-4.  Be about 200-250 words.
+Your final output MUST be a JSON object with the following structure:
+{{
+  "summary": "<A brief, coherent narrative explaining what these hot topics are, how they relate to each other, and why they are important for the field. Be about 200-250 words. Integrate insights from the summaries, preserving any mentioned novel or unique points.>",
+  "hot_topics": [
+    {{
+      "topic_name": "<The name of the first main hot topic, derived from the group summaries>",
+      "challenge": "<A brief description of the core challenge or question for this topic.>",
+      "related_papers": ["<Title of paper 1>", "<Title of paper 2>"]
+    }}
+  ]
+}}
 
-Synthesized Summary of Hot Topics:""")
+Instructions:
+1.  Identify and list 2-4 main hot topics that emerge from the collective summaries.
+2.  For each `topic_name`, find the most relevant group summary and use its content to fill in the `challenge`.
+3.  Use the provided `group_key_to_papers_json` to populate the `related_papers` list for each topic. Match the topic to the most relevant group key.
+"""),
+            ("user", "Group summaries are provided above. Here is the mapping from group keys to paper titles to help you populate 'related_papers':\n\n{group_key_to_papers_json}")
+        ])
 
-        chain = prompt | self.llm
+        parser = JsonOutputParser()
+        chain = prompt | self.llm | parser
         
         summaries_text = "\n\n".join(f"Cluster Summary {i+1}:\n{summary}" for i, summary in enumerate(group_summaries))
+        group_key_to_papers_json = json.dumps(group_key_to_papers, indent=2, ensure_ascii=False)
 
-        synthesis_result = chain.invoke({"group_summaries_text": summaries_text})
-        return synthesis_result.content
+        try:
+            synthesis_result = chain.invoke({
+                "group_summaries_text": summaries_text,
+                "group_key_to_papers_json": group_key_to_papers_json
+            })
+            return synthesis_result
+        except Exception as e:
+            print(f"    ⚠️ Error during final synthesis: {e}")
+            return {
+                "summary": "Failed to synthesize final summary due to an error.",
+                "hot_topics": []
+            }
 
     def run(self, professor_name: str, main_papers: List[Dict[str, Any]], ref1_papers: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
@@ -223,7 +258,7 @@ Synthesized Summary of Hot Topics:""")
             paper_id = paper['id']
             cached_result = self.cache.get(
                 paper_id,
-                required_keys=["paper_id", "title", "problem_summary", "problem_representativeness_score"]
+                required_keys=["paper_id", "title", "justification", "identified_problem", "problem_representativeness_score"]
             )
 
             if cached_result:
@@ -259,8 +294,8 @@ Synthesized Summary of Hot Topics:""")
             }
 
         # 步骤2: 筛选高分论文
-        high_score_threshold = 7
-        high_score_papers = [p for p in all_rated_papers if p.get("problem_representativeness_score", 0) >= high_score_threshold]
+        high_score_threshold = 0.7
+        high_score_papers = [p for p in all_rated_papers if p.get("problem_representativeness_score", 0.0) >= high_score_threshold]
         print(f"\n    -> Found {len(high_score_papers)} papers with score >= {high_score_threshold}.")
 
         # 步骤3: Map-Reduce综合高分论文，提炼热点问题
@@ -286,11 +321,12 @@ Synthesized Summary of Hot Topics:""")
 
             # Final Synthesis: 综合所有小组的总结
             if group_summaries:
-                summary = self._synthesize_final_summary(group_summaries)
+                synthesis_output = self._synthesize_final_summary(group_summaries, paper_groups)
+                summary = synthesis_output.get("summary", "Could not generate summary from synthesis.")
+                hot_topics = synthesis_output.get("hot_topics", [])
             else:
                 summary = "Could not generate group summaries, unable to synthesize hot topics."
-
-            hot_topics = list(paper_groups.keys())
+                hot_topics = []
         else:
             print("    -> No high-score papers found. Cannot synthesize hot topics.")
             summary = "没有发现具有足够领域问题代表性的论文，无法总结出当前的热点问题。"

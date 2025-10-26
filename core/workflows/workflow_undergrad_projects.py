@@ -82,11 +82,11 @@ class UndergradProjectsWorkflow:
         使用 LLM 评估单篇论文，判断其“工作复杂度”和“本科生友好度”。
         """
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an experienced professor evaluating research papers for potential undergraduate projects.
+            ("system", """You are a harsh and strict professor evaluating research papers for potential undergraduate projects. Your standards are very high.
 Provide a JSON response with the following structure:
 {{
-  "complexity_score": <An integer score from 1 (very simple) to 10 (very complex) for the overall technical difficulty>,
-  "friendliness_score": <An integer score from 1 (very unfriendly) to 10 (very friendly) for undergraduate involvement, considering required background knowledge and feasibility>,
+  "complexity_score": <A float score from 0.0 (very simple) to 1.0 (very complex) for the overall technical difficulty. Be critical and use the full range of the scale.>,
+  "friendliness_score": <A float score from 0.0 (very unfriendly) to 1.0 (very friendly) for undergraduate involvement, considering required background knowledge and feasibility. Be realistic about the challenges for undergraduates.>,
   "project_idea": "<A concrete, one-sentence project idea for an undergraduate based on this paper. If not suitable, state 'Not suitable'.>"
 }}"""),
             ("user", "Please evaluate the following paper content for undergraduate project suitability and provide the structured JSON output:\n\n---\n{paper_content}\n---")
@@ -183,8 +183,8 @@ Synthesized Summary of Project Suggestions:""")
         # 步骤2: 筛选合适的论文 (复杂度适中，友好度较高)
         suitable_papers = [
             p for p in all_evaluated_papers 
-            if 4 <= p.get("complexity_score", 0) <= 8 
-            and p.get("friendliness_score", 0) >= 6
+            if 0.4 <= p.get("complexity_score", 0.0) <= 0.8 
+            and p.get("friendliness_score", 0.0) >= 0.6
         ]
         print(f"\n    -> Found {len(suitable_papers)} suitable papers for undergraduate projects.")
 
