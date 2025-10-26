@@ -28,34 +28,13 @@ class FieldProblemsWorkflow:
     """
     分析领域热点问题的工作流。
     """
-    def __init__(self):
+    def __init__(self, main_llm, fallback_llm=None):
         """
-        初始化工作流。
+        初始化工作流，接收外部传入的LLM实例。
         """
         print("  -> FieldProblemsWorkflow initialized.")
-        self.llm = ChatOpenAI(
-            model=config.LLM_MODEL,
-            openai_api_key=config.OPENAI_API_KEY,
-            base_url=config.OPENAI_API_BASE,
-            temperature=config.LLM_TEMPERATURE
-        )
-        
-        # 初始化备用 LLM
-        self.fallback_llm = None
-        if config.DASHSCOPE_API_KEY:
-            try:
-                self.fallback_llm = ChatTongyi(
-                    model=config.LLM_FALLBACK_MODEL,
-                    dashscope_api_key=config.DASHSCOPE_API_KEY,
-                    temperature=config.LLM_TEMPERATURE
-                )
-                print("  -> Fallback LLM (DashScope) initialized.")
-            except Exception as e:
-                print(f"  ⚠️ Could not initialize Fallback LLM. Reason: {e}")
-                self.fallback_llm = None
-        else:
-            print("  -> Fallback LLM not configured (DASHSCOPE_API_KEY not found).")
-            
+        self.llm = main_llm
+        self.fallback_llm = fallback_llm
         self.cache = None
 
     def _load_paper_content(self, file_path: str) -> str:

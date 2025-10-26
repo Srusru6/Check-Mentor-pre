@@ -10,7 +10,10 @@
 from typing import List, Dict, Any
 import json
 
-# 在后续步骤中，我们将从这里导入具体的工作流实现
+from langchain_openai import ChatOpenAI
+from langchain_community.chat_models import ChatTongyi
+
+from . import config
 from .workflows.workflow_contribution import ContributionWorkflow
 from .workflows.workflow_field_problems import FieldProblemsWorkflow
 from .workflows.workflow_undergrad_projects import UndergradProjectsWorkflow
@@ -21,12 +24,37 @@ class WorkflowOrchestrator:
     """
     def __init__(self):
         """
-        初始化所有需要的工作流。
+        初始化所有LLM实例和需要的工作流。
         """
         print("⚙️ Workflow Orchestrator initialized.")
-        self.contribution_workflow = ContributionWorkflow()
-        self.field_problems_workflow = FieldProblemsWorkflow()
-        self.undergrad_projects_workflow = UndergradProjectsWorkflow()
+        
+        # 1. 统一初始化LLM实例
+        main_llm = ChatOpenAI(
+            model=config.LLM_MODEL,
+            openai_api_key=config.OPENAI_API_KEY,
+            base_url=config.OPENAI_API_BASE,
+            temperature=config.LLM_TEMPERATURE
+        )
+        
+        fallback_llm = None
+        if config.DASHSCOPE_API_KEY:
+            try:
+                fallback_llm = ChatTongyi(
+                    model=config.LLM_FALLBACK_MODEL,
+                    dashscope_api_key=config.DASHSCOPE_API_KEY,
+                    temperature=config.LLM_TEMPERATURE
+                )
+                print("  -> Fallback LLM (DashScope) initialized successfully.")
+            except Exception as e:
+                print(f"  ⚠️ Could not initialize Fallback LLM. Reason: {e}")
+                fallback_llm = None
+        else:
+            print("  -> INFO: Fallback LLM not configured (DASHSCOPE_API_KEY not found). The program will run with the main LLM only.")
+
+        # 2. 将LLM实例注入到各个工作流中
+        self.contribution_workflow = ContributionWorkflow(main_llm, fallback_llm)
+        self.field_problems_workflow = FieldProblemsWorkflow(main_llm, fallback_llm)
+        self.undergrad_projects_workflow = UndergradProjectsWorkflow(main_llm, fallback_llm)
 
     def run(
         self,
