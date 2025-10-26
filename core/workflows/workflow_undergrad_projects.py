@@ -14,8 +14,10 @@ import time
 from typing import List, Dict, Any
 
 from langchain_openai import ChatOpenAI
+from langchain_community.chat_models import ChatTongyi
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.exceptions import OutputParserException
 
 from .. import config
 from .cache_manager import CacheManager
@@ -33,8 +35,25 @@ class UndergradProjectsWorkflow:
             model=config.LLM_MODEL,
             openai_api_key=config.OPENAI_API_KEY,
             base_url=config.OPENAI_API_BASE,
-            temperature=0.3
+            temperature=config.LLM_TEMPERATURE
         )
+
+        # 初始化备用 LLM
+        self.fallback_llm = None
+        if config.DASHSCOPE_API_KEY:
+            try:
+                self.fallback_llm = ChatTongyi(
+                    model=config.LLM_FALLBACK_MODEL,
+                    dashscope_api_key=config.DASHSCOPE_API_KEY,
+                    temperature=config.LLM_TEMPERATURE
+                )
+                print("  -> Fallback LLM (DashScope) initialized.")
+            except Exception as e:
+                print(f"  ⚠️ Could not initialize Fallback LLM. Reason: {e}")
+                self.fallback_llm = None
+        else:
+            print("  -> Fallback LLM not configured (DASHSCOPE_API_KEY not found).")
+
         self.cache = None
 
     def _load_paper_content(self, file_path: str) -> str:
@@ -45,6 +64,35 @@ class UndergradProjectsWorkflow:
         except Exception as e:
             print(f"    ⚠️ Error loading file {file_path}: {e}")
             return ""
+
+    def _invoke_llm_with_fallback(self, chain, paper_content):
+        """
+        调用LLM，如果主LLM失败，则尝试备用LLM。
+        """
+        try:
+            print("      -> Attempting main LLM...")
+            result = chain.invoke({"paper_content": paper_content[:12000]})
+            return result
+        except (OutputParserException, json.JSONDecodeError) as e:
+            print(f"      ⚠️ Main LLM output parsing failed: {e}. Retrying with main LLM...")
+            try:
+                result = chain.invoke({"paper_content": paper_content[:12000]})
+                return result
+            except Exception as final_e:
+                print(f"      ⚠️ Main LLM retry failed: {final_e}.")
+        except Exception as e:
+            print(f"      ⚠️ Main LLM failed: {e}")
+
+        if self.fallback_llm:
+            try:
+                print("      -> Attempting fallback LLM...")
+                fallback_chain = chain.with_components(llm=self.fallback_llm)
+                result = fallback_chain.invoke({"paper_content": paper_content[:12000]})
+                return result
+            except Exception as e:
+                print(f"      ⚠️ Fallback LLM also failed: {e}")
+        
+        raise RuntimeError("Both main and fallback LLMs failed to process the paper.")
 
     def _evaluate_single_paper(self, paper_content: str) -> Dict[str, Any]:
         """
@@ -64,7 +112,7 @@ Provide a JSON response with the following structure:
         parser = JsonOutputParser()
         chain = prompt | self.llm | parser
 
-        evaluation_result = chain.invoke({"paper_content": paper_content[:12000]})
+        evaluation_result = self._invoke_llm_with_fallback(chain, paper_content)
         time.sleep(1) # Add a delay to avoid rate limiting
         
         return evaluation_result

@@ -22,6 +22,11 @@ LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")
 LLM_MODEL = os.getenv("LLM_MODEL", "DeepSeek-V3")
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.3"))
 
+# 副手 LLM (Fallback) 配置
+LLM_FALLBACK_PROVIDER = os.getenv("LLM_FALLBACK_PROVIDER", "dashscope")
+LLM_FALLBACK_MODEL = os.getenv("LLM_FALLBACK_MODEL", "qwen-plus")
+DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY")
+
 # Embedding 配置
 EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "openai")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")

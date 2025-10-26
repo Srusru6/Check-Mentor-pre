@@ -81,6 +81,9 @@
       ```env
       OPENAI_API_KEY="YOUR_API_KEY_HERE"
       OPENAI_API_BASE="YOUR_API_BASE_URL_HERE"
+
+      # 可选：配置备用LLM（阿里云百炼）以增强稳定性
+      DASHSCOPE_API_KEY="YOUR_DASHSCOPE_API_KEY_HERE"
       ```
 
 ## 如何运行
