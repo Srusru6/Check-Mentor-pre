@@ -52,18 +52,20 @@ class FieldProblemsWorkflow:
         调用LLM，如果主LLM失败，则尝试备用LLM。
         """
         try:
-            print("      -> Attempting main LLM...")
+            # print("      -> Attempting main LLM...")
             result = chain.invoke({"paper_content": paper_content[:12000]})
             return result
         except (OutputParserException, json.JSONDecodeError) as e:
-            print(f"      ⚠️ Main LLM output parsing failed: {e}. Retrying with main LLM...")
+            # print(f"      ⚠️ Main LLM output parsing failed: {e}. Retrying with main LLM...")
             try:
                 result = chain.invoke({"paper_content": paper_content[:12000]})
                 return result
             except Exception as final_e:
-                print(f"      ⚠️ Main LLM retry failed: {final_e}.")
+                # print(f"      ⚠️ Main LLM retry failed: {final_e}.")
+                pass
         except Exception as e:
-            print(f"      ⚠️ Main LLM failed: {e}")
+            # print(f"      ⚠️ Main LLM failed: {e}")
+            pass
 
         if self.fallback_llm:
             try:
@@ -219,7 +221,10 @@ Synthesized Summary of Hot Topics:""")
         all_rated_papers = []
         for paper in tqdm(all_papers, desc="  -> Rating field problem papers"):
             paper_id = paper['id']
-            cached_result = self.cache.get(paper_id)
+            cached_result = self.cache.get(
+                paper_id,
+                required_keys=["paper_id", "title", "problem_summary", "problem_representativeness_score"]
+            )
 
             if cached_result:
                 rating = cached_result
@@ -228,17 +233,21 @@ Synthesized Summary of Hot Topics:""")
                 if not content:
                     continue
                 
-                rating = self._rate_single_paper(content)
+                rating_result = self._rate_single_paper(content)
 
-                if rating.get("error"):
+                if rating_result.get("error"):
                     tqdm.write(f"    ⚠️ Skipped paper '{paper['title']}' due to LLM failure.")
                     continue
                 
+                # 构建完整的评分对象并缓存
+                rating = {
+                    **rating_result,
+                    'paper_id': paper_id,
+                    'title': paper['title']
+                }
                 self.cache.set(paper_id, rating)
                 time.sleep(1) # Delay after successful API call
 
-            rating['paper_id'] = paper_id
-            rating['title'] = paper['title']
             all_rated_papers.append(rating)
 
         if not all_rated_papers:

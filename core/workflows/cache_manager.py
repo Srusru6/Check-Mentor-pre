@@ -39,17 +39,28 @@ class CacheManager:
         with open(self.cache_path, 'w', encoding='utf-8') as f:
             json.dump(self.cache, f, ensure_ascii=False, indent=2)
 
-    def get(self, key: str) -> Optional[Any]:
+    def get(self, key: str, required_keys: Optional[list[str]] = None) -> Optional[Any]:
         """
-        从缓存中获取一个值。
+        从缓存中获取一个值，并可选择性地验证其完整性。
 
         Args:
             key (str): 要获取的数据的键（通常是 paper_id）。
+            required_keys (Optional[list[str]]): 一个包含必需字段名的列表。
+                                                  如果提供，将检查缓存条目是否包含所有这些字段。
 
         Returns:
-            Optional[Any]: 缓存的数据，如果不存在则返回 None。
+            Optional[Any]: 缓存的数据，如果不存在或不完整则返回 None。
         """
-        return self.cache.get(key)
+        item = self.cache.get(key)
+        if item is None:
+            return None
+
+        if required_keys:
+            if not all(k in item and item[k] is not None for k in required_keys):
+                # Incomplete item, treat as cache miss
+                return None
+        
+        return item
 
     def set(self, key: str, value: Any):
         """

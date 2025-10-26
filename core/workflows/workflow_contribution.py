@@ -51,32 +51,30 @@ class ContributionWorkflow:
         这是一个通用的调用逻辑，适用于所有单篇论文分析。
         """
         try:
-            # 尝试主LLM
-            print("      -> Attempting main LLM...")
+            # 尝试主LLM (在tqdm模式下保持静默)
             result = chain.invoke({"paper_content": paper_content[:12000]})
             return result
-        except (OutputParserException, json.JSONDecodeError) as e:
-            print(f"      ⚠️ Main LLM output parsing failed: {e}. Retrying with main LLM...")
-            # 有时解析失败是暂时的，重试一次
+        except (OutputParserException, json.JSONDecodeError):
+            # 第一次解析失败，静默重试一次
             try:
                 result = chain.invoke({"paper_content": paper_content[:12000]})
                 return result
-            except Exception as final_e:
-                print(f"      ⚠️ Main LLM retry failed: {final_e}.")
-                # fall through to fallback
-        except Exception as e:
-            print(f"      ⚠️ Main LLM failed: {e}")
+            except Exception:
+                # 重试失败，交由备用模型处理
+                pass
+        except Exception:
+            # 其他主LLM错误，交由备用模型处理
+            pass
 
         # 如果主LLM失败，且备用LLM已配置，则尝试备用LLM
         if self.fallback_llm:
             try:
-                # print("      -> Attempting fallback LLM...") # 进度条模式下静默
                 fallback_chain = chain.with_components(llm=self.fallback_llm)
                 result = fallback_chain.invoke({"paper_content": paper_content[:12000]})
                 return result
-            except Exception as e:
-                # print(f"      ⚠️ Fallback LLM also failed: {e}") # 进度条模式下静默
-                pass # 允许循环继续，最终在外部处理错误
+            except Exception:
+                # 备用模型也失败了
+                pass
         
         # 如果都失败了，则返回一个错误标记
         return {"error": "Both main and fallback LLMs failed."}
@@ -151,7 +149,11 @@ Synthesized Summary:""")
         # 使用tqdm创建进度条
         for paper in tqdm(main_papers, desc="  -> Analyzing contributions"):
             paper_id = paper['id']
-            cached_result = self.cache.get(paper_id)
+            # 检查缓存，并要求所有关键字段都存在
+            cached_result = self.cache.get(
+                paper_id, 
+                required_keys=["paper_id", "title", "research_area", "core_contribution"]
+            )
 
             if cached_result:
                 single_analysis = cached_result
@@ -160,18 +162,24 @@ Synthesized Summary:""")
                 if not content:
                     continue
                 
-                single_analysis = self._analyze_single_paper(content)
+                analysis_result = self._analyze_single_paper(content)
                 
                 # 检查LLM调用是否出错
-                if single_analysis.get("error"):
+                if analysis_result.get("error"):
                     tqdm.write(f"    ⚠️ Skipped paper '{paper['title']}' due to LLM failure.")
                     continue
 
+                # 构建完整的分析对象
+                single_analysis = {
+                    **analysis_result,
+                    'paper_id': paper_id,
+                    'title': paper['title']
+                }
+                
+                # 缓存完整的对象
                 self.cache.set(paper_id, single_analysis)
                 time.sleep(1) # 在成功调用后保留延迟，避免API超速
 
-            single_analysis['paper_id'] = paper_id
-            single_analysis['title'] = paper['title']
             all_single_analyses.append(single_analysis)
 
         # 检查是否有任何论文被成功分析
