@@ -11,6 +11,8 @@ Workflow 2: 分析领域的热点问题
 """
 import json
 import time
+import re
+from collections import defaultdict
 from typing import List, Dict, Any
 
 from langchain_openai import ChatOpenAI
@@ -69,27 +71,103 @@ Provide a JSON response with the following structure:
         
         return rating_result
 
-    def _synthesize_hot_topics(self, rated_papers: List[Dict[str, Any]]) -> str:
+    def _group_papers_by_problem(self, papers: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
         """
-        基于高分论文，综合分析出领域的热点问题。
+        (Map Step) 根据识别出的问题对论文进行分组。
+        使用简单的关键词匹配来聚合相似问题。
         """
-        prompt = ChatPromptTemplate.from_template("""You are a senior research analyst. Based on a list of highly-rated papers, identify and summarize the key research problems and hot topics in this field.
+        print("      -> Grouping papers by identified problem...")
+        
+        # 提取核心词作为分组依据，忽略常见的、非描述性的词语
+        stop_words = {'and', 'the', 'of', 'in', 'a', 'for', 'with', 'on', 'to', 'from', 'by'}
+        
+        def get_group_key(problem_phrase: str) -> str:
+            # 转换为小写，移除标点
+            normalized = re.sub(r'[^\w\s]', '', problem_phrase.lower())
+            # 分词并移除停用词，然后排序，确保顺序不影响key
+            keywords = sorted([word for word in normalized.split() if word not in stop_words])
+            # 如果没有关键词，则返回原始短语
+            return ' '.join(keywords) if keywords else problem_phrase
 
-The analyses of the papers are provided below:
+        groups = defaultdict(list)
+        for paper in papers:
+            problem = paper.get("identified_problem", "Uncategorized")
+            group_key = get_group_key(problem)
+            groups[group_key].append(paper)
+        
+        print(f"      -> Grouped into {len(groups)} topics.")
+        return groups
+
+    def _summarize_group(self, group_key: str, group_papers: List[Dict[str, Any]]) -> str:
+        """
+        (Reduce Step) 对单个论文小组进行总结。
+        """
+        print(f"        -> Summarizing group '{group_key}' with {len(group_papers)} papers...")
+
+        prompt = ChatPromptTemplate.from_template("""You are a research analyst summarizing a cluster of papers that address a similar problem.
+
+The problem area is: "{group_key}"
+The papers in this group are:
 {papers_json}
 
-Your summary should:
-1. List 2-4 main hot topics or core problems identified from these papers.
-2. Provide a brief, coherent narrative explaining what these hot topics are and why they are important.
-3. Be about 150-200 words.
+Your task is to write a concise summary for this specific group. Your summary MUST:
+1.  Start by clearly stating the core problem this group addresses.
+2.  Summarize the common approaches or findings within the group.
+3.  **Crucially, highlight any unique, novel, or outlier ideas, methods, or findings.** Do not let these unique points get lost. Mention them explicitly, for example: "While most papers focused on X, one paper uniquely proposed Y..."
+4.  Keep the summary for this group to about 100-150 words.
+
+Group Summary:""")
+        
+        chain = prompt | self.llm
+        papers_json_str = json.dumps(group_papers, indent=2, ensure_ascii=False)
+
+        # 限制传入的JSON字符串长度，以防万一
+        max_length = 12000
+        if len(papers_json_str) > max_length:
+            # 一个简单的截断策略
+            papers_to_include = []
+            current_length = 0
+            for paper in group_papers:
+                paper_str = json.dumps(paper, ensure_ascii=False)
+                if current_length + len(paper_str) > max_length:
+                    break
+                papers_to_include.append(paper)
+                current_length += len(paper_str)
+            papers_json_str = json.dumps(papers_to_include, indent=2, ensure_ascii=False)
+
+
+        summary = chain.invoke({
+            "group_key": group_key,
+            "papers_json": papers_json_str
+        }).content
+        time.sleep(1) # Add a delay
+        return summary
+
+    def _synthesize_final_summary(self, group_summaries: List[str]) -> str:
+        """
+        (Final Synthesis Step) 基于所有小组的总结，生成最终的综合报告。
+        """
+        print("    -> Synthesizing final summary from group summaries...")
+        prompt = ChatPromptTemplate.from_template("""You are a senior research analyst. You have been given summaries from several clusters of research papers. Your task is to synthesize these into a single, coherent overview of the field's hot topics.
+
+The summaries for each research cluster are provided below:
+---
+{group_summaries_text}
+---
+
+Your final synthesis should:
+1.  Identify and list 2-4 main hot topics or core problems that emerge from the collective summaries.
+2.  Provide a brief, coherent narrative explaining what these hot topics are, how they relate to each other, and why they are important for the field.
+3.  **Integrate insights from the summaries, preserving any mentioned novel or unique points.** For instance, if a summary mentions an outlier idea, ensure it is reflected in the final report as a potential emerging trend.
+4.  Be about 200-250 words.
 
 Synthesized Summary of Hot Topics:""")
 
         chain = prompt | self.llm
+        
+        summaries_text = "\n\n".join(f"Cluster Summary {i+1}:\n{summary}" for i, summary in enumerate(group_summaries))
 
-        papers_json_str = json.dumps(rated_papers, indent=2, ensure_ascii=False)
-
-        synthesis_result = chain.invoke({"papers_json": papers_json_str})
+        synthesis_result = chain.invoke({"group_summaries_text": summaries_text})
         return synthesis_result.content
 
     def run(self, professor_name: str, main_papers: List[Dict[str, Any]], ref1_papers: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -135,11 +213,34 @@ Synthesized Summary of Hot Topics:""")
         high_score_papers = [p for p in all_rated_papers if p.get("problem_representativeness_score", 0) >= high_score_threshold]
         print(f"    -> Found {len(high_score_papers)} papers with score >= {high_score_threshold}.")
 
-        # 步骤3: 综合高分论文，提炼热点问题
+        # 步骤3: Map-Reduce综合高分论文，提炼热点问题
         if high_score_papers:
-            print("    -> Synthesizing hot topics from high-score papers...")
-            summary = self._synthesize_hot_topics(high_score_papers)
-            hot_topics = list(set(p.get("identified_problem", "N/A") for p in high_score_papers))
+            # Map: 将论文按问题分组
+            paper_groups = self._group_papers_by_problem(high_score_papers)
+            
+            # Reduce: 对每个小组进行总结
+            group_summaries = []
+            # 为保证输出稳定性，对group key排序
+            sorted_group_keys = sorted(paper_groups.keys())
+            for group_key in sorted_group_keys:
+                group_papers = paper_groups[group_key]
+                # 如果一个小组论文太少，可能只是措辞差异，直接用其分析结果，不单独总结
+                if len(group_papers) <= 2:
+                    # 直接将论文的justification作为小组总结
+                    combined_justification = ". ".join([p['justification'] for p in group_papers])
+                    group_summary = f"A small cluster focused on '{group_key}'. The key idea is: {combined_justification}"
+                    group_summaries.append(group_summary)
+                else:
+                    group_summary = self._summarize_group(group_key, group_papers)
+                    group_summaries.append(group_summary)
+
+            # Final Synthesis: 综合所有小组的总结
+            if group_summaries:
+                summary = self._synthesize_final_summary(group_summaries)
+            else:
+                summary = "Could not generate group summaries, unable to synthesize hot topics."
+
+            hot_topics = list(paper_groups.keys())
         else:
             print("    -> No high-score papers found. Cannot synthesize hot topics.")
             summary = "没有发现具有足够领域问题代表性的论文，无法总结出当前的热点问题。"

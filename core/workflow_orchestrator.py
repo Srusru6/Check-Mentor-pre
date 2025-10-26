@@ -67,7 +67,7 @@ class WorkflowOrchestrator:
 
         # --- 工作流3: 分析本科生可参与的项目 ---
         print("\n➡️ [Workflow 3/3] 分析本科生可参与的项目...")
-        undergrad_projects_results = self.undergrad_projects_workflow.run(professor_name, ref1_papers, ref2_papers)
+        undergrad_projects_results = self.undergrad_projects_workflow.run(professor_name, ref2_papers)
         # print(json.dumps(undergrad_projects_results, indent=2, ensure_ascii=False))
         all_results['undergrad_projects_analysis'] = undergrad_projects_results
 
