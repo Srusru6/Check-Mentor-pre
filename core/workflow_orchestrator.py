@@ -30,6 +30,7 @@ class WorkflowOrchestrator:
 
     def run(
         self,
+        professor_name: str,
         main_papers: List[Dict[str, Any]],
         ref1_papers: List[Dict[str, Any]],
         ref2_papers: List[Dict[str, Any]],
@@ -38,6 +39,7 @@ class WorkflowOrchestrator:
         执行完整的分析流程。
 
         Args:
+            professor_name: 教授姓名，用于缓存。
             main_papers: 教授的代表作列表。
             ref1_papers: 引用文献列表。
             ref2_papers: 潜在本科生项目相关的文献列表。
@@ -51,21 +53,21 @@ class WorkflowOrchestrator:
 
         # --- 工作流1: 分析教授的核心贡献 ---
         print("\n➡️ [Workflow 1/3] 分析教授的核心贡献...")
-        contribution_results = self.contribution_workflow.run(main_papers)
+        contribution_results = self.contribution_workflow.run(professor_name, main_papers)
         # print(json.dumps(contribution_results, indent=2, ensure_ascii=False))
         all_results['contribution_analysis'] = contribution_results
 
 
         # --- 工作流2: 分析领域的热点问题 ---
         print("\n➡️ [Workflow 2/3] 分析领域的热点问题...")
-        field_problems_results = self.field_problems_workflow.run(main_papers, ref1_papers)
+        field_problems_results = self.field_problems_workflow.run(professor_name, main_papers, ref1_papers)
         # print(json.dumps(field_problems_results, indent=2, ensure_ascii=False))
         all_results['field_problems_analysis'] = field_problems_results
 
 
         # --- 工作流3: 分析本科生可参与的项目 ---
         print("\n➡️ [Workflow 3/3] 分析本科生可参与的项目...")
-        undergrad_projects_results = self.undergrad_projects_workflow.run(ref1_papers, ref2_papers)
+        undergrad_projects_results = self.undergrad_projects_workflow.run(professor_name, ref1_papers, ref2_papers)
         # print(json.dumps(undergrad_projects_results, indent=2, ensure_ascii=False))
         all_results['undergrad_projects_analysis'] = undergrad_projects_results
 

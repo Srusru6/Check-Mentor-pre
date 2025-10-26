@@ -10,6 +10,7 @@ Workflow 3: 分析本科生可参与的项目
 3. 基于得分适中的论文，提炼出潜在的、可操作性强的本科生科研项目点。
 """
 import json
+import time
 from typing import List, Dict, Any
 
 from langchain_openai import ChatOpenAI
@@ -17,6 +18,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 
 from .. import config
+from .cache_manager import CacheManager
 
 class UndergradProjectsWorkflow:
     """
@@ -33,6 +35,7 @@ class UndergradProjectsWorkflow:
             base_url=config.OPENAI_API_BASE,
             temperature=0.3
         )
+        self.cache = None
 
     def _load_paper_content(self, file_path: str) -> str:
         """加载指定路径的 Markdown 文件内容。"""
@@ -62,6 +65,7 @@ Provide a JSON response with the following structure:
         chain = prompt | self.llm | parser
 
         evaluation_result = chain.invoke({"paper_content": paper_content[:12000]})
+        time.sleep(1) # Add a delay to avoid rate limiting
         
         return evaluation_result
 
@@ -88,10 +92,11 @@ Synthesized Summary of Project Suggestions:""")
         synthesis_result = chain.invoke({"papers_json": papers_json_str})
         return synthesis_result.content
 
-    def run(self, ref1_papers: List[Dict[str, Any]], ref2_papers: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def run(self, professor_name: str, ref1_papers: List[Dict[str, Any]], ref2_papers: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         执行分析本科生项目的完整流程。
         """
+        self.cache = CacheManager(professor_name, "undergrad_projects_analysis")
         all_papers = ref1_papers + ref2_papers
         print(f"  -> Running UndergradProjectsWorkflow on {len(all_papers)} papers.")
 
@@ -106,13 +111,22 @@ Synthesized Summary of Project Suggestions:""")
         # 步骤1: 对每篇论文进行评估
         all_evaluated_papers = []
         for paper in all_papers:
-            print(f"    -> Evaluating paper: {paper['title']}")
-            content = self._load_paper_content(paper['md_filename'])
-            if not content:
-                continue
-            
-            evaluation = self._evaluate_single_paper(content)
-            evaluation['paper_id'] = paper['id']
+            paper_id = paper['id']
+            cached_result = self.cache.get(paper_id)
+
+            if cached_result:
+                print(f"    -> Found cached evaluation for paper: {paper['title']}")
+                evaluation = cached_result
+            else:
+                print(f"    -> Evaluating paper: {paper['title']}")
+                content = self._load_paper_content(paper['md_filename'])
+                if not content:
+                    continue
+                
+                evaluation = self._evaluate_single_paper(content)
+                self.cache.set(paper_id, evaluation)
+
+            evaluation['paper_id'] = paper_id
             evaluation['title'] = paper['title']
             all_evaluated_papers.append(evaluation)
 

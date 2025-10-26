@@ -10,6 +10,7 @@ Workflow 2: 分析领域的热点问题
 3. 基于得分较高的论文，综合分析出该领域当前关注的核心问题和技术趋势。
 """
 import json
+import time
 from typing import List, Dict, Any
 
 from langchain_openai import ChatOpenAI
@@ -17,6 +18,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 
 from .. import config
+from .cache_manager import CacheManager
 
 class FieldProblemsWorkflow:
     """
@@ -33,6 +35,7 @@ class FieldProblemsWorkflow:
             base_url=config.OPENAI_API_BASE,
             temperature=0.3
         )
+        self.cache = None
 
     def _load_paper_content(self, file_path: str) -> str:
         """加载指定路径的 Markdown 文件内容。"""
@@ -62,6 +65,7 @@ Provide a JSON response with the following structure:
         chain = prompt | self.llm | parser
 
         rating_result = chain.invoke({"paper_content": paper_content[:12000]})
+        time.sleep(1) # Add a delay to avoid rate limiting
         
         return rating_result
 
@@ -88,10 +92,11 @@ Synthesized Summary of Hot Topics:""")
         synthesis_result = chain.invoke({"papers_json": papers_json_str})
         return synthesis_result.content
 
-    def run(self, main_papers: List[Dict[str, Any]], ref1_papers: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def run(self, professor_name: str, main_papers: List[Dict[str, Any]], ref1_papers: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         执行分析领域热点问题的完整流程。
         """
+        self.cache = CacheManager(professor_name, "field_problems_analysis")
         all_papers = main_papers + ref1_papers
         print(f"  -> Running FieldProblemsWorkflow on {len(all_papers)} papers.")
 
@@ -106,13 +111,22 @@ Synthesized Summary of Hot Topics:""")
         # 步骤1: 对每篇论文进行评分
         all_rated_papers = []
         for paper in all_papers:
-            print(f"    -> Rating paper: {paper['title']}")
-            content = self._load_paper_content(paper['md_filename'])
-            if not content:
-                continue
-            
-            rating = self._rate_single_paper(content)
-            rating['paper_id'] = paper['id']
+            paper_id = paper['id']
+            cached_result = self.cache.get(paper_id)
+
+            if cached_result:
+                print(f"    -> Found cached rating for paper: {paper['title']}")
+                rating = cached_result
+            else:
+                print(f"    -> Rating paper: {paper['title']}")
+                content = self._load_paper_content(paper['md_filename'])
+                if not content:
+                    continue
+                
+                rating = self._rate_single_paper(content)
+                self.cache.set(paper_id, rating)
+
+            rating['paper_id'] = paper_id
             rating['title'] = paper['title']
             all_rated_papers.append(rating)
 

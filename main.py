@@ -65,7 +65,7 @@ def main(professor_name: str, test_mode: bool):
     orchestrator = WorkflowOrchestrator()
     
     # 步骤 3: 调用新的工作流编排器
-    all_results = orchestrator.run(main_papers, ref1_papers, ref2_papers)
+    all_results = orchestrator.run(professor_name, main_papers, ref1_papers, ref2_papers)
     
     # 步骤 4: 初始化最终分析器并生成报告
     print("\n--- 步骤四：整合结果并生成最终报告 ---\n")
