@@ -22,7 +22,7 @@ OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
 
 # LLM 配置
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")
-LLM_MODEL = os.getenv("LLM_MODEL", "DeepSeek-V3")
+LLM_MODEL = os.getenv("LLM_MODEL", "DeepSeek-V3")  # 测试 DeepSeek 在新提示词下的表现
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.3"))
 
 # 副手 LLM (Fallback) 配置
