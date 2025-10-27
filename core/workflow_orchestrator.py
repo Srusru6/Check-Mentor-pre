@@ -9,6 +9,7 @@
 """
 import os
 import uuid
+import json
 from pathlib import Path
 from typing import List, Dict, Any
 
@@ -125,6 +126,20 @@ class WorkflowOrchestrator:
         print(f"    - 引用文献 (ref1): {len(ref1_papers)} 篇")
         print(f"    - 潜在项目文献 (ref2): {len(ref2_papers)} 篇")
 
+        # 创建日志目录
+        log_dir = "log"
+        os.makedirs(log_dir, exist_ok=True)
+
+        def log_workflow_output(workflow_name: str, data: Any):
+            """将工作流的输出结果以JSON格式记录到日志文件。"""
+            log_path = os.path.join(log_dir, f"{self.professor_name}_{workflow_name}_output.json")
+            try:
+                with open(log_path, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, indent=2, ensure_ascii=False)
+                # print(f"    -> Logged {workflow_name} output to {log_path}")
+            except Exception as e:
+                print(f"    ⚠️ Failed to log {workflow_name} output. Reason: {e}")
+
         # 步骤 2: 执行各个工作流
         self._print_section_header("任务二：执行分析工作流", level=2)
         all_results = {}
@@ -132,25 +147,29 @@ class WorkflowOrchestrator:
         # --- 工作流1: 分析教授的核心贡献 ---
         print("\n➡️ [Workflow 1/3] 分析教授的核心贡献...")
         contribution_results = self.contribution_workflow.run(self.professor_name, main_papers)
+        log_workflow_output("contribution", contribution_results)
         all_results['contribution_analysis'] = contribution_results
 
         # --- 工作流2: 分析领域的热点问题 ---
         print("\n➡️ [Workflow 2/3] 分析领域的热点问题...")
         field_problems_results = self.field_problems_workflow.run(
+            professor_name=self.professor_name,
             main_papers=main_papers,
             ref1_papers=ref1_papers
         )
+        log_workflow_output("field_problems", field_problems_results)
         all_results['field_problems_analysis'] = field_problems_results
 
         # --- 工作流3: 分析本科生可参与的项目 ---
         print("\n➡️ [Workflow 3/3] 分析本科生可参与的项目...")
         # 将工作流1的总结作为输入，传递给工作流3
-        contribution_summary = contribution_results.get("summary", "")
+        contribution_summary = contribution_results.get("contribution_summary", "")
         undergrad_projects_results = self.undergrad_projects_workflow.run(
             self.professor_name, 
             ref2_papers,
             contribution_summary
         )
+        log_workflow_output("undergrad_projects", undergrad_projects_results)
         all_results['undergrad_projects_analysis'] = undergrad_projects_results
 
         print("\n--- 所有工作流执行完毕 ---\n")

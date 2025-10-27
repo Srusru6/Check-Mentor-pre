@@ -80,38 +80,41 @@ class FieldProblemsWorkflow:
         使用 LLM 评估单篇论文，基于四维模型进行打分。
         """
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are a top-tier, discerning academic reviewer, known for your critical judgment and ability to differentiate between good and truly exceptional work. Your reputation depends on it. **You must avoid grade inflation.** Use the entire 0.0 to 1.0 scale meaningfully. A score of 0.9 or higher should be reserved only for papers that are genuine landmarks in their field.
+            ("system", """You are a world-class reviewer for a top-tier journal like *Nature* or *Science*. The papers you are reviewing have already been pre-selected for high quality. Your task is to distinguish the truly groundbreaking from the merely competent. Your reputation for critical and precise judgment depends on it.
+
+**You must use the entire 0.0 to 1.0 scale meaningfully. A score of 0.5 represents a "solid, good" paper. A score of 0.8 or higher is reserved for "exceptional" work, and 1.0 is for "game-changing" masterpieces.** Avoid grade inflation.
 
 You will provide a multi-dimensional evaluation based on the following four criteria. Each score MUST be a float between 0.0 and 1.0.
 
-**Evaluation Criteria & Weights:**
+**1. Significance (Weight: 30%)**: How important is the core problem?
+- **1.0**: Solves a Nobel-prize-level problem or opens a completely new field.
+- **0.8**: Addresses a grand challenge in the field with transformative impact.
+- **0.5**: (New Baseline) Tackles a well-known, important problem, making a significant and widely recognized contribution.
+- **0.2**: Addresses a known sub-problem with a solid, incremental contribution.
+- **0.0**: Addresses a niche problem with limited impact or one that is already largely solved.
 
-1.  **Significance (Weight: 30%)**: How important is the core problem this paper addresses?
-    - 1.0: A foundational, field-defining problem (e.g., demonstrating quantum supremacy, solving a major open question).
-    - 0.7: A known, important sub-problem that unlocks significant progress.
-    - 0.4: A niche or incremental issue with limited impact.
-    - 0.1: A minor or solved problem.
+**2. Novelty (Weight: 10%)**: How original is the proposed solution/method?
+- **1.0**: A completely new theory, experimental paradigm, or technique that fundamentally changes the field.
+- **0.8**: A highly original and non-obvious synthesis of disparate ideas or a major breakthrough in methodology.
+- **0.5**: (New Baseline) A clever and significant improvement or a new application of an existing advanced method.
+- **0.2**: A standard, incremental improvement on a known method.
+- **0.0**: Routine application of well-known methods.
+- *Note for Reviews*: This score is expected to be low and should not be penalized.
 
-2.  **Novelty (Weight: 10%)**: How original is the paper's proposed SOLUTION or METHOD?
-    - 1.0: A completely new paradigm or technique that changes how the field works.
-    - 0.7: A clever and non-obvious combination or improvement of existing methods.
-    - 0.4: A standard, incremental improvement.
-    - 0.1: A routine application of well-known methods.
-    - **Note for Review Papers**: For a review, this score is expected to be low. Do not penalize it for this.
+**3. Clarity (Weight: 30%)**: How clear and insightful is the presentation?
+- **1.0**: (For top reviews/papers) A masterclass in scientific communication. It not only presents its own ideas flawlessly but also synthesizes complex topics, **elucidates historical context, and maps the logical structure of the field**. A new PhD student could grasp the entire landscape from it.
+- **0.8**: Exceptionally clear, well-structured, and a pleasure to read. The arguments are elegant and easy for experts to follow.
+- **0.5**: (New Baseline) Well-written and structured; the core message is clear and understandable by experts with some effort.
+- **0.2**: Generally understandable, but key parts are confusing, poorly structured, or buried in jargon, requiring significant effort to parse.
+- **0.0**: Poorly written, illogical, and hard to understand.
 
-3.  **Clarity (Weight: 30%)**: How clearly is the problem, its context, and the proposed solution/synthesis presented?
-    - 1.0: A masterclass in scientific communication. A new student could grasp the field's landscape from this paper alone. The structure is flawless.
-    - 0.7: Well-written and structured, understandable by experts with some effort.
-    - 0.4: Generally understandable, but key parts are confusing, poorly structured, or buried in jargon.
-    - 0.1: Poorly written, illogical, and hard to understand.
-    - **Note for Review Papers**: A well-organized review that clarifies the state of the art and provides a coherent narrative should score very highly here. This is a primary metric for a good review.
-
-4.  **Potential (Weight: 30%)**: How likely is this work to inspire or enable significant future research?
-    - 1.0: Opens up entirely new research avenues or provides a critical enabling tool that will be widely adopted.
-    - 0.7: Likely to lead to a flurry of direct follow-up studies and citations.
-    - 0.4: May be cited or lead to a few incremental studies.
-    - 0.1: Unlikely to have a significant impact on the field.
-    - **Note for Review Papers**: A comprehensive and insightful review that successfully maps out future challenges and opportunities should score very highly here. This is a primary metric for a good review.
+**4. Potential (Weight: 30%)**: How likely is this work to inspire significant future research?
+- **1.0**: Opens up entirely new research branches or provides a critical enabling tool that will be widely adopted by the entire field.
+- **0.8**: Highly likely to inspire a flurry of direct, high-quality follow-up studies and become a future citation classic.
+- **0.5**: (New Baseline) Able to guide a series of valuable, incremental follow-up studies.
+- **0.2**: May be cited by a few related studies.
+- **0.0**: Unlikely to have a significant impact on future research.
+- *Note for Reviews*: A review's ability to successfully map out future challenges and opportunities is a core measure of its potential.
 
 You MUST provide a JSON response with the following structure:
 {{
@@ -119,7 +122,7 @@ You MUST provide a JSON response with the following structure:
   "novelty_score": <float between 0.0 and 1.0>,
   "clarity_score": <float between 0.0 and 1.0>,
   "potential_score": <float between 0.0 and 1.0>,
-  "justification": "<A concise, critical justification for your scores, referencing the criteria above. Explain WHY you gave these specific scores.>",
+  "justification": "<A concise, critical justification for your scores, referencing the strict criteria above. Explain WHY you gave these specific scores, especially if you award a high score.>",
   "identified_problem": "<A short, precise phrase identifying the core problem the paper tackles.>"
 }}"""),
             ("user", "Please analyze the following paper content and provide the structured JSON output:\n\n---\n{paper_content}\n---")
@@ -238,19 +241,12 @@ Example Output:
             # Fallback: if clustering fails, return a single group to avoid crashing
             return {"All High-Score Papers": [p["title"] for p in papers]}
 
-    def run(self, main_papers: List[Dict[str, Any]], ref1_papers: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def run(self, professor_name: str, main_papers: List[Dict[str, Any]], ref1_papers: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         执行工作流，分析所有论文并识别领域热点问题。
         """
         self._print_section_header("Workflow 2: Analyzing Field Problems", level=2)
         
-        if not main_papers:
-             print("  -> No main papers provided. Cannot determine professor name for cache.")
-             # Fallback to a default name if no papers are provided
-             professor_name = "default_professor"
-        else:
-            professor_name = main_papers[0]['authors'][0]
-
         self.cache = CacheManager(professor_name, "field_problems_analysis")
         print(f"  -> Cache file set for professor '{professor_name}' in workflow 'field_problems_analysis'.")
 
@@ -381,6 +377,13 @@ Example Output:
             "summary": summary_result.get("summary", "Could not generate summary."),
             "hot_topics": summary_result.get("hot_topics", []),
             "analyzed_papers": [p["title"] for p in top_papers],
+            "rated_papers": [
+                {
+                    "title": p["title"],
+                    "weighted_score": p.get("weighted_score", 0.0)
+                }
+                for p in rated_papers
+            ]
         }
 
         print("✅ Workflow 2 completed successfully.")

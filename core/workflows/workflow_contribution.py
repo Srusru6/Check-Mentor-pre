@@ -11,6 +11,7 @@ Workflow 1: 分析教授的核心贡献
 """
 import json
 import time
+import re
 from typing import List, Dict, Any
 from tqdm import tqdm
 
@@ -104,29 +105,106 @@ Provide a JSON response with the following structure:
         
         return analysis_result
 
-    def _synthesize_results(self, all_analyses: List[Dict[str, Any]]) -> str:
+    def _synthesize_results(self, all_analyses: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
-        综合所有单篇论文的分析结果，生成一份整体总结。
+        将所有论文的分析结果综合成一个总的、对本科生友好的报告。
         """
-        prompt = ChatPromptTemplate.from_template("""You are a senior research analyst. Based on the analyses of a professor's key papers, synthesize a comprehensive summary of their research interests and main contributions.
+        # 过滤掉分析失败的论文
+        valid_analyses = [analysis for analysis in all_analyses if "error" not in analysis]
+        if not valid_analyses:
+            return {
+                "research_directions": ["No valid analysis results to synthesize."],
+                "contribution_summary": "Could not generate a summary due to lack of valid data."
+            }
 
-The analyses of individual papers are provided below in JSON format:
-{analyses_json}
+        # 将所有分析结果打包成一个字符串
+        analysis_text = "\n\n".join([
+            f"Paper {i+1}:\n- Research Area: {analysis.get('research_area', 'N/A')}\n- Core Contribution: {analysis.get('core_contribution', 'N/A')}"
+            for i, analysis in enumerate(valid_analyses)
+        ])
 
-Your summary should:
-1. Identify and list the main research areas (2-4 distinct areas).
-2. Provide a coherent narrative summarizing the professor's overall contributions and impact.
-3. Be about 150-200 words.
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are a senior science writer and mentor, tasked with writing a summary of a professor's research for a bright, motivated undergraduate student. The student is exploring research opportunities and needs to understand the professor's work: what it is, why it's important, and what its impact has been.
 
-Synthesized Summary:""")
+**Your Goal:** Transform a list of individual paper analyses into a compelling, clear, and honest narrative. Avoid overly simplistic analogies, but strive for clarity.
 
-        chain = prompt | self.llm
+**Your Audience:** A smart undergraduate who is familiar with basic physics/engineering concepts but is not an expert in this specific sub-field.
 
-        analyses_json_str = json.dumps(all_analyses, indent=2, ensure_ascii=False)
+**Key Instructions:**
 
-        synthesis_result = chain.invoke({"analyses_json": analyses_json_str})
-        return synthesis_result.content
+1.  **Structure and Tone:**
+    *   **Role-play:** Write as a knowledgeable and encouraging mentor. Your tone should be professional yet accessible and engaging.
+    *   **Narrative, not a List:** Do not just list the findings. Weave them into a coherent story about the professor's research journey and goals.
+    *   **Word Count:** Aim for a comprehensive summary of around 400 words. You have enough space to be thorough.
 
+2.  **Content - Section 1: Research Directions (What they do):**
+    *   Identify 3-5 primary, distinct research themes from the provided list.
+    *   For each theme, write a short, clear paragraph. Start with the key concept, then briefly explain its goal.
+    *   **"Prudent Explanation" Rule:**
+        *   Identify key technical terms (e.g., "topological photonics," "quantum entanglement").
+        *   If you are highly confident in your knowledge, provide a concise, parenthetical explanation `(like this)`.
+        *   **Crucially:** If you encounter a highly specialized term and are NOT confident in explaining it, **DO NOT GUESS**. Simply use the term as is. This signals to the student that it's a specific concept to look up. Honesty is better than being wrong.
+
+3.  **Content - Section 2: Contribution Summary (Why it matters & its Impact):**
+    *   Synthesize the individual contributions into a big-picture overview.
+    *   Explain the **"Why"**: What is the grand challenge or fundamental question this professor's work is trying to address? (e.g., "making quantum computers scalable," "pushing the limits of optical communication").
+    *   Explain the **"Impact"**: How has their work advanced the field? Mention breakthroughs, pioneering work, or how they connect different ideas.
+    *   Conclude with a powerful summary sentence that captures the essence of their research's significance.
+
+**Output Format:**
+You MUST provide a JSON response with a `research_directions` key (a list of strings) and a `contribution_summary` key (a single string).
+
+{{
+  "research_directions": [
+    "<Paragraph for Direction 1>",
+    "<Paragraph for Direction 2>",
+    ...
+  ],
+  "contribution_summary": "<The overall summary paragraph, approximately 400 words.>"
+}}"""),
+            ("user", "Based on the following analyses of the professor's papers, please generate the structured summary:\n\n---\n{analysis_text}\n---")
+        ])
+
+        # 分离LLM调用和解析
+        llm_chain = prompt | self.llm
+        parser = JsonOutputParser()
+
+        try:
+            # 步骤1: 调用LLM并获取原始输出
+            raw_output_obj = llm_chain.invoke({"analysis_text": analysis_text})
+            raw_output = raw_output_obj.content if hasattr(raw_output_obj, 'content') else str(raw_output_obj)
+
+            # 步骤2: 清理并提取纯净的JSON字符串
+            match = re.search(r"```json\s*([\s\S]*?)\s*```", raw_output)
+            if match:
+                cleaned_output = match.group(1)
+            else:
+                cleaned_output = raw_output
+
+            # 步骤3: 尝试解析清理后的输出
+            synthesis_result = parser.parse(cleaned_output)
+            
+            # 步骤4: 验证解析后的结构
+            if not isinstance(synthesis_result, dict) or "contribution_summary" not in synthesis_result:
+                print(f"    ⚠️ Synthesis output is not in the expected format: {synthesis_result}")
+                return {
+                    "research_directions": ["Synthesis failed: Unexpected output format."],
+                    "contribution_summary": f"LLM returned an unexpected data structure. Raw output: {json.dumps(synthesis_result, indent=2, ensure_ascii=False)}"
+                }
+            return synthesis_result
+            
+        except OutputParserException as e:
+            print(f"    🔴 Critical Error: Failed to parse LLM output during synthesis. Reason: {e}")
+            return {
+                "research_directions": ["Synthesis failed: OutputParserException."],
+                "contribution_summary": f"The language model's response was not valid JSON and could not be parsed. Raw output snippet: {e.llm_output[:200]}..."
+            }
+        except Exception as e:
+            print(f"    🔴 Critical Error: An unexpected error occurred during synthesis: {e}")
+            return {
+                "research_directions": ["Synthesis failed: Unexpected Exception."],
+                "contribution_summary": f"An unexpected error occurred. Reason: {str(e)}"
+            }
 
     def run(self, professor_name: str, main_papers: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
@@ -197,13 +275,14 @@ Synthesized Summary:""")
 
         # 步骤3: 格式化最终输出
         final_result = {
-            "summary": final_summary,
-            "research_areas": list(set(analysis.get("research_area", "N/A") for analysis in all_single_analyses)),
+            "research_directions": final_summary.get("research_directions", []),
+            "contribution_summary": final_summary.get("contribution_summary", "未能生成核心贡献总结。"),
+            "analyzed_papers": [p["title"] for p in all_single_analyses],
             "key_contributions": [
                 {
                     "paper_id": analysis['paper_id'],
                     "title": analysis['title'],
-                    "contribution": analysis['core_contribution']
+                    "contribution": analysis.get('core_contribution', 'N/A')
                 }
                 for analysis in all_single_analyses
             ]
