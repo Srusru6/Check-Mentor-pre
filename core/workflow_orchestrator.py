@@ -136,7 +136,10 @@ class WorkflowOrchestrator:
 
         # --- 工作流2: 分析领域的热点问题 ---
         print("\n➡️ [Workflow 2/3] 分析领域的热点问题...")
-        field_problems_results = self.field_problems_workflow.run(self.professor_name, main_papers, ref1_papers)
+        field_problems_results = self.field_problems_workflow.run(
+            main_papers=main_papers,
+            ref1_papers=ref1_papers
+        )
         all_results['field_problems_analysis'] = field_problems_results
 
         # --- 工作流3: 分析本科生可参与的项目 ---

@@ -11,18 +11,13 @@ Workflow 2: 分析领域的热点问题
 """
 import json
 import time
-import re
-from collections import defaultdict
 from typing import List, Dict, Any
 from tqdm import tqdm
 
-from langchain_openai import ChatOpenAI
-from langchain_community.chat_models import ChatTongyi
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.exceptions import OutputParserException
 
-from .. import config
 from .cache_manager import CacheManager
 
 class FieldProblemsWorkflow:
@@ -38,6 +33,13 @@ class FieldProblemsWorkflow:
         self.fallback_llm = fallback_llm
         self.cache = None
 
+    def _print_section_header(self, title: str, level: int = 1):
+        """打印带样式的章节标题"""
+        if level == 1:
+            print(f"\n{'='*70}\n🎓 {title}\n{'='*70}")
+        elif level == 2:
+            print(f"\n--- {title} ---")
+
     def _load_paper_content(self, file_path: str) -> str:
         """加载指定路径的 Markdown 文件内容。"""
         try:
@@ -52,29 +54,23 @@ class FieldProblemsWorkflow:
         调用LLM，如果主LLM失败，则尝试备用LLM。
         """
         try:
-            # print("      -> Attempting main LLM...")
             result = chain.invoke({"paper_content": paper_content[:12000]})
             return result
-        except (OutputParserException, json.JSONDecodeError) as e:
-            # print(f"      ⚠️ Main LLM output parsing failed: {e}. Retrying with main LLM...")
+        except (OutputParserException, json.JSONDecodeError):
             try:
                 result = chain.invoke({"paper_content": paper_content[:12000]})
                 return result
-            except Exception as final_e:
-                # print(f"      ⚠️ Main LLM retry failed: {final_e}.")
+            except Exception:
                 pass
-        except Exception as e:
-            # print(f"      ⚠️ Main LLM failed: {e}")
+        except Exception:
             pass
 
         if self.fallback_llm:
             try:
-                # print("      -> Attempting fallback LLM...")
-                fallback_chain = chain.with_components(llm=self.fallback_llm)
+                fallback_chain = chain.with_llm(self.fallback_llm)
                 result = fallback_chain.invoke({"paper_content": paper_content[:12000]})
                 return result
-            except Exception as e:
-                # print(f"      ⚠️ Fallback LLM also failed: {e}")
+            except Exception:
                 pass
         
         return {"error": "Both main and fallback LLMs failed."}
@@ -84,148 +80,86 @@ class FieldProblemsWorkflow:
         使用 LLM 评估单篇论文，基于四维模型进行打分。
         """
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are a top-tier academic reviewer analyzing papers to map out a field's hot topics. Your evaluation must be structured, critical, and forward-looking.
+            ("system", """You are a top-tier, discerning academic reviewer, known for your critical judgment and ability to differentiate between good and truly exceptional work. Your reputation depends on it. **You must avoid grade inflation.** Use the entire 0.0 to 1.0 scale meaningfully. A score of 0.9 or higher should be reserved only for papers that are genuine landmarks in their field.
 
-For each paper, you will provide a multi-dimensional evaluation based on the following four criteria. Each score MUST be a float between 0.0 and 1.0.
+You will provide a multi-dimensional evaluation based on the following four criteria. Each score MUST be a float between 0.0 and 1.0.
 
-1.  **Significance (Weight: 40%)**: How important is the core problem this paper addresses?
-    - 1.0: A foundational, field-defining problem.
-    - 0.5: A known, important sub-problem.
-    - 0.1: A niche or minor issue.
+**Evaluation Criteria & Weights:**
 
-2.  **Novelty (Weight: 20%)**: How original is the paper's proposed SOLUTION or METHOD?
-    - 1.0: A completely new paradigm or technique.
-    - 0.5: An incremental improvement on existing methods.
-    - 0.1: A standard application of known methods.
-    - Note: For review papers that don't propose new solutions, this score will naturally be low.
+1.  **Significance (Weight: 30%)**: How important is the core problem this paper addresses?
+    - 1.0: A foundational, field-defining problem (e.g., demonstrating quantum supremacy, solving a major open question).
+    - 0.7: A known, important sub-problem that unlocks significant progress.
+    - 0.4: A niche or incremental issue with limited impact.
+    - 0.1: A minor or solved problem.
 
-3.  **Clarity (Weight: 20%)**: How well does the paper DEFINE and STRUCTURE the problem space?
-    - 1.0: Provides a new, clarifying framework or taxonomy for the field. (Typical for excellent review papers).
-    - 0.5: Clearly defines the specific problem it tackles. (Typical for good research papers).
-    - 0.1: The problem definition is unclear or buried.
+2.  **Novelty (Weight: 10%)**: How original is the paper's proposed SOLUTION or METHOD?
+    - 1.0: A completely new paradigm or technique that changes how the field works.
+    - 0.7: A clever and non-obvious combination or improvement of existing methods.
+    - 0.4: A standard, incremental improvement.
+    - 0.1: A routine application of well-known methods.
+    - **Note for Review Papers**: For a review, this score is expected to be low. Do not penalize it for this.
 
-4.  **Potential (Weight: 20%)**: How much future research could this paper inspire?
-    - 1.0: Opens up entirely new research avenues or questions.
-    - 0.5: Suggests clear next steps and has good potential for follow-up work.
-    - 0.1: The work feels self-contained or addresses a problem that is largely "solved".
+3.  **Clarity (Weight: 30%)**: How clearly is the problem, its context, and the proposed solution/synthesis presented?
+    - 1.0: A masterclass in scientific communication. A new student could grasp the field's landscape from this paper alone. The structure is flawless.
+    - 0.7: Well-written and structured, understandable by experts with some effort.
+    - 0.4: Generally understandable, but key parts are confusing, poorly structured, or buried in jargon.
+    - 0.1: Poorly written, illogical, and hard to understand.
+    - **Note for Review Papers**: A well-organized review that clarifies the state of the art and provides a coherent narrative should score very highly here. This is a primary metric for a good review.
 
-Your final output MUST be a JSON object with the following structure:
+4.  **Potential (Weight: 30%)**: How likely is this work to inspire or enable significant future research?
+    - 1.0: Opens up entirely new research avenues or provides a critical enabling tool that will be widely adopted.
+    - 0.7: Likely to lead to a flurry of direct follow-up studies and citations.
+    - 0.4: May be cited or lead to a few incremental studies.
+    - 0.1: Unlikely to have a significant impact on the field.
+    - **Note for Review Papers**: A comprehensive and insightful review that successfully maps out future challenges and opportunities should score very highly here. This is a primary metric for a good review.
+
+You MUST provide a JSON response with the following structure:
 {{
-  "significance_score": <float>,
-  "novelty_score": <float>,
-  "clarity_score": <float>,
-  "potential_score": <float>,
-  "justification": "<A brief, insightful justification for your scores, referencing the four criteria.>",
-  "identified_problem": "<A concise phrase for the core problem, e.g., 'scalable quantum entanglement'>"
+  "significance_score": <float between 0.0 and 1.0>,
+  "novelty_score": <float between 0.0 and 1.0>,
+  "clarity_score": <float between 0.0 and 1.0>,
+  "potential_score": <float between 0.0 and 1.0>,
+  "justification": "<A concise, critical justification for your scores, referencing the criteria above. Explain WHY you gave these specific scores.>",
+  "identified_problem": "<A short, precise phrase identifying the core problem the paper tackles.>"
 }}"""),
-            ("user", "Please evaluate the following paper content and provide the structured JSON output:\n\n---\n{paper_content}\n---")
+            ("user", "Please analyze the following paper content and provide the structured JSON output:\n\n---\n{paper_content}\n---")
         ])
         
         parser = JsonOutputParser()
         chain = prompt | self.llm | parser
 
-        rating_result = self._invoke_llm_with_fallback(chain, paper_content)
+        analysis_result = self._invoke_llm_with_fallback(chain, paper_content)
         
-        return rating_result
+        if "error" in analysis_result:
+            return analysis_result
+            
+        required_keys = ["significance_score", "novelty_score", "clarity_score", "potential_score"]
+        if not all(key in analysis_result for key in required_keys):
+            return {"error": "LLM response was missing one or more required score keys."}
 
-    def _group_papers_by_problem(self, papers: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+        return analysis_result
+
+    def _summarize_hot_topics(self, synthesis_context: str) -> Dict[str, Any]:
         """
-        (Map Step) 根据识别出的问题对论文进行分组。
-        使用简单的关键词匹配来聚合相似问题。
+        (New) Synthesizes hot topics directly from a list of top-rated papers.
+        This replaces the more complex map-reduce logic for simplicity and robustness.
         """
-        print("      -> Grouping papers by identified problem...")
-
-        # 提取核心词作为分组依据，忽略常见的、非描述性的词语
-        stop_words = {'and', 'the', 'of', 'in', 'a', 'for', 'with', 'on', 'to', 'from', 'by'}
-        
-        def get_group_key(problem_phrase: str) -> str:
-            # 转换为小写，移除标点
-            normalized = re.sub(r'[^\w\s]', '', problem_phrase.lower())
-            # 分词并移除停用词，然后排序，确保顺序不影响key
-            keywords = sorted([word for word in normalized.split() if word not in stop_words])
-            # 如果没有关键词，则返回原始短语
-            return ' '.join(keywords) if keywords else problem_phrase
-
-        groups = defaultdict(list)
-        for paper in papers:
-            problem = paper.get("identified_problem", "Uncategorized")
-            group_key = get_group_key(problem)
-            groups[group_key].append(paper)
-        
-        print(f"      -> Grouped into {len(groups)} topics.")
-        return groups
-
-    def _summarize_group(self, group_key: str, group_papers: List[Dict[str, Any]]) -> str:
-        """
-        (Reduce Step) 对单个论文小组进行总结。
-        """
-        print(f"        -> Summarizing group '{group_key}' with {len(group_papers)} papers...")
-
-        prompt = ChatPromptTemplate.from_template("""You are a research analyst summarizing a cluster of papers that address a similar problem.
-
-The problem area is: "{group_key}"
-The papers in this group are:
-{papers_json}
-
-Your task is to write a concise summary for this specific group. Your summary MUST:
-1.  Start by clearly stating the core problem this group addresses.
-2.  Summarize the common approaches or findings within the group.
-3.  **Crucially, highlight any unique, novel, or outlier ideas, methods, or findings.** Do not let these unique points get lost. Mention them explicitly, for example: "While most papers focused on X, one paper uniquely proposed Y..."
-4.  Keep the summary for this group to about 100-150 words.
-
-Group Summary:""")
-        
-        chain = prompt | self.llm
-        papers_json_str = json.dumps(group_papers, indent=2, ensure_ascii=False)
-
-        # 限制传入的JSON字符串长度，以防万一
-        max_length = 12000
-        if len(papers_json_str) > max_length:
-            # 一个简单的截断策略
-            papers_to_include = []
-            current_length = 0
-            for paper in group_papers:
-                paper_str = json.dumps(paper, ensure_ascii=False)
-                if current_length + len(paper_str) > max_length:
-                    break
-                papers_to_include.append(paper)
-                current_length += len(paper_str)
-            papers_json_str = json.dumps(papers_to_include, indent=2, ensure_ascii=False)
-
-
-        summary = chain.invoke({
-            "group_key": group_key,
-            "papers_json": papers_json_str
-        }).content
-        time.sleep(1) # Add a delay
-        return summary
-
-    def _synthesize_final_summary(self, group_summaries: List[str], paper_groups: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Any]:
-        """
-        (Final Synthesis Step) 基于所有小组的总结，生成最终的综合报告和结构化的热点列表。
-        """
-        print("    -> Synthesizing final summary and hot topics from group summaries...")
-        
-        # 创建一个从 group_key 到相关论文标题的映射
-        group_key_to_papers = {
-            key: [p.get('title', 'N/A') for p in papers] 
-            for key, papers in paper_groups.items()
-        }
+        print("    -> Synthesizing hot topics from top-rated papers...")
 
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are a senior research analyst. You have been given summaries from several clusters of research papers. Your task is to synthesize these into a single, coherent overview of the field's hot topics.
+            ("system", """You are a senior research analyst. You have been given a list of top-rated papers from a specific field. Your task is to synthesize this information into a coherent overview of the field's hot topics.
 
-The summaries for each research cluster are provided below:
+The papers are provided below, each with a title, the core problem it addresses, and a justification for its high rating.
 ---
-{group_summaries_text}
+{synthesis_context}
 ---
 
 Your final output MUST be a JSON object with the following structure:
 {{
-  "summary": "<A brief, coherent narrative explaining what these hot topics are, how they relate to each other, and why they are important for the field. Be about 200-250 words. Integrate insights from the summaries, preserving any mentioned novel or unique points.>",
+  "summary": "<A brief, coherent narrative (about 200-250 words) explaining what these hot topics are, how they relate to each other, and why they are important for the field. Integrate insights from the paper justifications, preserving any mentioned novel or unique points.>",
   "hot_topics": [
     {{
-      "topic_name": "<The name of the first main hot topic, derived from the group summaries>",
+      "topic_name": "<The name of the first main hot topic, derived from the papers>",
       "challenge": "<A brief description of the core challenge or question for this topic.>",
       "related_papers": ["<Title of paper 1>", "<Title of paper 2>"]
     }}
@@ -233,23 +167,21 @@ Your final output MUST be a JSON object with the following structure:
 }}
 
 Instructions:
-1.  Identify and list 2-4 main hot topics that emerge from the collective summaries.
-2.  For each `topic_name`, find the most relevant group summary and use its content to fill in the `challenge`.
-3.  Use the provided `group_key_to_papers_json` to populate the `related_papers` list for each topic. Match the topic to the most relevant group key.
+1.  Read through all the provided paper details.
+2.  Identify 2-4 overarching themes or "hot topics" that emerge from the collective 'Identified Problem' fields.
+3.  For each topic, formulate a concise `topic_name` and `challenge`.
+4.  Group the paper titles under the most relevant `hot_topics` they belong to. A paper can be listed under multiple topics if it's relevant.
+5.  Write the final `summary` narrative based on all the information.
 """),
-            ("user", "Group summaries are provided above. Here is the mapping from group keys to paper titles to help you populate 'related_papers':\n\n{group_key_to_papers_json}")
+            ("user", "The context containing the top-rated papers is provided above. Please generate the JSON output.")
         ])
 
         parser = JsonOutputParser()
         chain = prompt | self.llm | parser
-        
-        summaries_text = "\n\n".join(f"Cluster Summary {i+1}:\n{summary}" for i, summary in enumerate(group_summaries))
-        group_key_to_papers_json = json.dumps(group_key_to_papers, indent=2, ensure_ascii=False)
 
         try:
             synthesis_result = chain.invoke({
-                "group_summaries_text": summaries_text,
-                "group_key_to_papers_json": group_key_to_papers_json
+                "synthesis_context": synthesis_context
             })
             return synthesis_result
         except Exception as e:
@@ -259,134 +191,120 @@ Instructions:
                 "hot_topics": []
             }
 
-    def run(self, professor_name: str, main_papers: List[Dict[str, Any]], ref1_papers: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def run(self, main_papers: List[Dict[str, Any]], ref1_papers: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
-        执行分析领域热点问题的完整流程。
+        执行工作流，分析所有论文并识别领域热点问题。
         """
-        self.cache = CacheManager(professor_name, "field_problems_analysis")
-        all_papers = main_papers + ref1_papers
-        print(f"  -> Running FieldProblemsWorkflow on {len(all_papers)} papers.")
+        self._print_section_header("Workflow 2: Analyzing Field Problems", level=2)
+        
+        if not main_papers:
+             print("  -> No main papers provided. Cannot determine professor name for cache.")
+             cache_filename = "default_field_problems_analysis_cache.json"
+        else:
+            cache_filename = f"{main_papers[0]['authors'][0]}_field_problems_analysis_cache.json"
+        self.cache = CacheManager(cache_filename)
+        print(f"  -> Cache file set to: {self.cache.cache_path}")
 
+        all_papers = main_papers + ref1_papers
+        
         if not all_papers:
             print("  -> No papers provided. Skipping workflow.")
             return {
                 "summary": "没有提供任何论文，无法分析领域热点问题。",
                 "hot_topics": [],
-                "rated_papers": []
+                "analyzed_papers": [],
             }
 
-        # 步骤1: 对每篇论文进行评分
-        all_rated_papers = []
-        for paper in tqdm(all_papers, desc="  -> Rating field problem papers"):
-            paper_id = paper['id']
-            cached_result = self.cache.get(
-                paper_id,
-                required_keys=[
-                    "paper_id", "title", "justification", "identified_problem",
-                    "significance_score", "novelty_score", "clarity_score", "potential_score",
-                    "weighted_score"
-                ]
-            )
+        # 1. 评估所有论文的“领域问题代表性”
+        print(f"\n  [Step 1/2] Evaluating {len(all_papers)} papers for field relevance...")
+        
+        rated_papers = []
+        
+        with tqdm(total=len(all_papers), desc="  Rating papers") as pbar:
+            for paper in all_papers:
+                paper_id = paper["id"]
+                
+                cached_result = self.cache.get(paper_id)
+                if cached_result:
+                    pbar.update(1)
+                    pbar.set_postfix_str("Cached")
+                    if all(k in cached_result for k in ['significance_score', 'novelty_score', 'clarity_score', 'potential_score']):
+                        # 将缓存结果与元数据合并
+                        full_cached_result = {**cached_result, 'paper_id': paper_id, 'title': paper['title']}
+                        rated_papers.append(full_cached_result)
+                        continue
+                    else:
+                        pbar.set_postfix_str("Invalid Cache, Re-analyzing")
 
-            if cached_result:
-                rating = cached_result
-            else:
-                content = self._load_paper_content(paper['md_filename'])
-                if not content:
+                paper_content = self._load_paper_content(paper["md_filename"])
+                if not paper_content:
+                    pbar.update(1)
+                    pbar.set_postfix_str("Skipped (no content)")
                     continue
-                
-                rating_result = self._rate_single_paper(content)
 
-                if rating_result.get("error"):
-                    tqdm.write(f"    ⚠️ Skipped paper '{paper['title']}' due to LLM failure.")
+                analysis_result = self._rate_single_paper(paper_content)
+                
+                if "error" in analysis_result:
+                    pbar.update(1)
+                    pbar.set_postfix_str(f"Error ({analysis_result['error']})")
                     continue
+
+                s_score = analysis_result.get('significance_score', 0)
+                n_score = analysis_result.get('novelty_score', 0)
+                c_score = analysis_result.get('clarity_score', 0)
+                p_score = analysis_result.get('potential_score', 0)
                 
-                # 计算加权分数
-                s_score = rating_result.get("significance_score", 0.0)
-                n_score = rating_result.get("novelty_score", 0.0)
-                c_score = rating_result.get("clarity_score", 0.0)
-                p_score = rating_result.get("potential_score", 0.0)
+                weighted_score = (s_score * 0.3) + (n_score * 0.1) + (c_score * 0.3) + (p_score * 0.3)
+                analysis_result["weighted_score"] = round(weighted_score, 2)
+
+                full_result = {**analysis_result, "paper_id": paper_id, "title": paper["title"]}
                 
-                weighted_score = (s_score * 0.4) + (n_score * 0.2) + (c_score * 0.2) + (p_score * 0.2)
-
-                # 构建完整的评分对象并缓存
-                rating = {
-                    **rating_result,
-                    'paper_id': paper_id,
-                    'title': paper['title'],
-                    'weighted_score': round(weighted_score, 4)
-                }
-                self.cache.set(paper_id, rating)
-                time.sleep(1) # Delay after successful API call
-
-            all_rated_papers.append(rating)
-
-        if not all_rated_papers:
+                rated_papers.append(full_result)
+                self.cache.set(paper_id, analysis_result)
+                
+                pbar.update(1)
+                pbar.set_postfix_str(f"Score: {weighted_score:.2f}")
+                time.sleep(0.1)
+        
+        if not rated_papers:
             print("\n  -> No papers were successfully rated. Skipping synthesis.")
             return {
                 "summary": "所有论文均未能成功评分，无法分析领域热点问题。",
                 "hot_topics": [],
-                "rated_papers": []
+                "analyzed_papers": [],
             }
 
-        # 步骤2: 筛选高分论文
-        high_score_threshold = 0.6 # Adjusted threshold for the new weighted score
-        high_score_papers = [p for p in all_rated_papers if p.get("weighted_score", 0.0) >= high_score_threshold]
-        print(f"\n    -> Found {len(high_score_papers)} papers with score >= {high_score_threshold}.")
+        # 2. 基于高分论文，综合分析热点问题
+        print("\n  [Step 2/2] Synthesizing hot topics from top-rated papers...")
+        
+        rated_papers.sort(key=lambda x: x.get("weighted_score", 0), reverse=True)
+        
+        top_n = min(len(rated_papers), 10)
+        top_papers = rated_papers[:top_n]
 
-        # 步骤3: Map-Reduce综合高分论文，提炼热点问题
-        if high_score_papers:
-            # Map: 将论文按问题分组
-            paper_groups = self._group_papers_by_problem(high_score_papers)
-            
-            # Reduce: 对每个小组进行总结
-            group_summaries = []
-            # 为保证输出稳定性，对group key排序
-            sorted_group_keys = sorted(paper_groups.keys())
-            for group_key in sorted_group_keys:
-                group_papers = paper_groups[group_key]
-                # 如果一个小组论文太少，可能只是措辞差异，直接用其分析结果，不单独总结
-                if len(group_papers) <= 2:
-                    # 直接将论文的justification作为小组总结
-                    combined_justification = ". ".join([p['justification'] for p in group_papers])
-                    group_summary = f"A small cluster focused on '{group_key}'. The key idea is: {combined_justification}"
-                    group_summaries.append(group_summary)
-                else:
-                    group_summary = self._summarize_group(group_key, group_papers)
-                    group_summaries.append(group_summary)
+        if not top_papers:
+            print("    ⚠️ No high-score papers found. Cannot synthesize hot topics.")
+            return {
+                "summary": "未能成功评估任何论文，无法生成领域热点问题总结。",
+                "hot_topics": [],
+                "analyzed_papers": []
+            }
 
-            # Final Synthesis: 综合所有小组的总结
-            if group_summaries:
-                synthesis_output = self._synthesize_final_summary(group_summaries, paper_groups)
-                summary = synthesis_output.get("summary", "Could not generate summary from synthesis.")
-                hot_topics = synthesis_output.get("hot_topics", [])
-            else:
-                summary = "Could not generate group summaries, unable to synthesize hot topics."
-                hot_topics = []
-        else:
-            print("    -> No high-score papers found. Cannot synthesize hot topics.")
-            summary = "没有发现具有足够领域问题代表性的论文，无法总结出当前的热点问题。"
-            hot_topics = []
+        synthesis_context = "Here are the top-rated papers identified as most representative of the field's key problems:\n\n"
+        for i, paper in enumerate(top_papers, 1):
+            synthesis_context += f"--- Paper {i} ---\n"
+            synthesis_context += f"Title: {paper.get('title', 'N/A')}\n"
+            synthesis_context += f"Identified Problem: {paper.get('identified_problem', 'N/A')}\n"
+            synthesis_context += f"Justification: {paper.get('justification', 'N/A')}\n"
+            synthesis_context += f"Weighted Score: {paper.get('weighted_score', 0):.2f}\n\n"
 
-        # 步骤4: 格式化最终输出
+        summary_result = self._summarize_hot_topics(synthesis_context)
+
         final_result = {
-            "summary": summary,
-            "hot_topics": hot_topics,
-            "rated_papers": [
-                {
-                    "paper_id": p['paper_id'],
-                    "title": p['title'],
-                    "score": p.get('weighted_score', 'N/A'),
-                    "details": {
-                        "significance": p.get('significance_score', 'N/A'),
-                        "novelty": p.get('novelty_score', 'N/A'),
-                        "clarity": p.get('clarity_score', 'N/A'),
-                        "potential": p.get('potential_score', 'N/A')
-                    },
-                    "justification": p.get('justification', 'N/A')
-                }
-                for p in all_rated_papers
-            ]
+            "summary": summary_result.get("summary", "Could not generate summary."),
+            "hot_topics": summary_result.get("hot_topics", []),
+            "analyzed_papers": [p["title"] for p in top_papers],
         }
 
+        print("✅ Workflow 2 completed successfully.")
         return final_result
