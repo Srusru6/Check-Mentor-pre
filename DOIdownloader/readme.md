@@ -1,6 +1,6 @@
 # DOI 下载器（学术爬虫）
 
-一个可配置的 DOI 学术论文下载器：支持下载原文、按层并发地递归下载引用（ref1/ref2/...），可在指定层筛选“年轻作者”；内置重试、限速、持久化历史与丰富的命令行参数。
+一个可配置的 DOI 学术论文下载器：支持下载原文、按层并发地递归下载引用（ref1/ref2/...），并默认下载“被引”（cited-by）论文；可在指定层筛选“年轻作者”；内置重试、限速、持久化历史与丰富的命令行参数。
 
 提示：默认会将 ref1 层中被判定为“年轻作者”的文章复制一份到 ref2 目录，便于集中查看（与是否开启 `--young` 无关）。可用 `--no-copy-ref1-young-to-ref2` 关闭此行为。且当设置 `--save-only-depth` 且不为 2 时，该复制不会发生。
 
@@ -8,7 +8,7 @@
 
 直接运行脚本时将：
 
-1) 尝试从脚本同目录的 `results.txt` 读取每位老师的 DOI 列表，并按老师名输出到 `Downloads_pdf/<老师名>/(main|ref1|ref2)`。
+1) 尝试从脚本同目录的 `results.txt` 读取每位老师的 DOI 列表，并按老师名输出到 `Downloads_pdf/<老师名>/(main|ref1|ref2|cited)`（默认会额外抓取每个根 DOI 的“被引”论文到 `cited/`）。
 
 2) 若 `results.txt` 解析不到任何 DOI，则回退到示例任务：
 	 - 自动开启生产模式（精简输出）
@@ -35,12 +35,13 @@ pip install requests beautifulsoup4 python-Levenshtein
 
 ```text
 python download.py [--prod] [--doi DOI1,DOI2] [--teacher NAME]
-									 [--from-results [PATH]] [--pdf-root PATH]
-									 [--depth N] [--workers K] [--save-only-depth D]
-									 [--young] [--young-depth L] [--young-keywords KW1,KW2]
-									 [--no-copy-ref1-young-to-ref2]
-									 [--rps R] [--retries T] [--backoff B] [--timeout S]
-									 [--unpaywall-email you@domain] [--scihub-domains URL1,URL2]
+							 [--from-results [PATH]] [--pdf-root PATH]
+							 [--depth N] [--workers K] [--save-only-depth D]
+							 [--young] [--young-depth L] [--young-keywords KW1,KW2]
+							 [--no-copy-ref1-young-to-ref2]
+							 [--rps R] [--retries T] [--backoff B] [--timeout S]
+							 [--unpaywall-email you@domain] [--openalex-email you@domain]
+							 [--scihub-domains URL1,URL2] [--no-cited]
 ```
 
 - --prod：开启生产模式（精简日志）。
@@ -60,11 +61,13 @@ python download.py [--prod] [--doi DOI1,DOI2] [--teacher NAME]
 - --backoff：HTTP 重试退避因子（覆盖内置默认）。
 - --timeout：HTTP 请求超时时间（秒，覆盖内置默认）。
 - --unpaywall-email：用于调用 Unpaywall API 的联系邮箱（优先寻找 OA PDF）。
+- --openalex-email：用于调用 OpenAlex API（用于“被引”DOI 查询）的 mailto 邮箱。
 - --scihub-domains：自定义 Sci-Hub 镜像列表（逗号分隔），按顺序尝试。
+- --no-cited：关闭默认的“被引”下载（默认开启）。
 
 ### 常用示例（Windows PowerShell）
 
-1) 从 `results.txt` 批量下载，按老师分目录保存（推荐）：
+1) 从 `results.txt` 批量下载，按老师分目录保存（默认会在 `cited/` 目录下载根 DOI 的“被引”论文）：
 
 ```powershell
 python download.py --depth 1 --workers 4
@@ -96,21 +99,9 @@ python download.py --doi 10.1126/science.177.4047.393 --depth 0 --unpaywall-emai
 python download.py --doi 10.1038/nphys4074 --depth 2 --save-only-depth 2
 ```
 
-## 反向引用（根据 DOI 找“被引”论文）
+## 反向引用（根据 DOI 下载“被引”论文）
 
-若需查询“一篇论文被哪些论文引用了”的 DOI，可使用同目录脚本：
-
-```powershell
-python cited_by_from_doi.py --doi 10.1038/nature12373
-# 或批量：
-python cited_by_from_doi.py --input d:\path\to\dois.txt --out d:\path\to\citing.csv
-# 建议带邮箱提升礼貌与稳定性：
-python cited_by_from_doi.py --doi 10.1038/nature12373 --email you@example.com
-```
-
-输出字段：`source_doi, citing_doi, citing_openalex_id, year`。
-
-实现基于 OpenAlex API（无需 Key）：先将 DOI 解析为 OpenAlex Work ID，再用 `filter=cites:W...` 遍历分页（跳过没有 DOI 的记录）。
+已合并至 `download.py`，默认开启。对于每个根 DOI，会通过 OpenAlex 查询其“被引”DOI，并将对应论文下载到 `cited/` 目录。如需关闭，请加 `--no-cited`。
 
 ## ref2 生成逻辑（关键点）
 
@@ -148,6 +139,9 @@ Downloads_pdf/
 		main/  # 原文
 		ref1/  # 一级引用
 		ref2/  # 二级引用；默认也会汇总一份来自 ref1 的“年轻作者”副本（可关闭）
+		cited/ # 根 DOI 的“被引”论文（默认启用；可 --no-cited 关闭）
+
+每个层级目录（main/ref1/cited）会维护一个 `history.json`，记录已下载论文的：标题、DOI、引用（references）、被引（cited_by）、作者列表、出版年月（year/month）以及“年轻作者”名单。该文件在并发下载时线程安全地增量更新，自动去重（按 DOI 覆盖更新）。
 ```
 
 ## 注意事项与建议

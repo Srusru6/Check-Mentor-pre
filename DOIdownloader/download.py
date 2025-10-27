@@ -42,6 +42,8 @@ REQUEST_TIMEOUT = 15
 # Optional integrations and runtime knobs
 UNPAYWALL_EMAIL: str | None = None
 SCIHUB_DOMAINS: list[str] | None = None
+OPENALEX_MAILTO: str | None = None
+OPENALEX_BASE = "https://api.openalex.org"
 
 # Simple global rate limiter (shared among threads)
 class RateLimiter:
@@ -653,6 +655,62 @@ def get_pdf_from_unpaywall(doi: str, email: str | None) -> str | None:
             print(f"Unpaywall lookup failed: {e}")
     return None
 
+# --- OpenAlex cited-by utilities ---
+def get_openalex_id_for_doi(doi: str, email: str | None = None) -> str | None:
+    doi = normalize_doi(doi)
+    if not doi:
+        return None
+    try:
+        url = f"{OPENALEX_BASE}/works/doi:{requests.utils.quote(doi, safe='')}"
+        params = {}
+        if email:
+            params["mailto"] = email
+        r = http_get(url, params=params, headers={**DEFAULT_HEADERS, "Accept": "application/json"}, timeout=30)
+        if r.status_code == 404:
+            return None
+        r.raise_for_status()
+        data = r.json() or {}
+        oid = data.get("id")
+        if not oid:
+            return None
+        return oid.rsplit("/", 1)[-1]
+    except Exception:
+        return None
+
+def iter_openalex_citing_works(openalex_id: str, email: str | None = None):
+    url = f"{OPENALEX_BASE}/works"
+    params = {
+        "filter": f"cites:{openalex_id}",
+        "select": "id,doi,display_name,publication_year",
+        "per_page": 200,
+        "cursor": "*",
+        "sort": "publication_year:desc",
+    }
+    if email:
+        params["mailto"] = email
+    while True:
+        r = http_get(url, params=params, headers={**DEFAULT_HEADERS, "Accept": "application/json"}, timeout=60)
+        r.raise_for_status()
+        data = r.json() or {}
+        for item in data.get("results", []) or []:
+            yield item
+        next_cursor = (data.get("meta") or {}).get("next_cursor")
+        if not next_cursor:
+            break
+        params["cursor"] = next_cursor
+
+def get_citing_dois_for_one(doi: str, email: str | None = None) -> list[str]:
+    oid = get_openalex_id_for_doi(doi, email=email)
+    if not oid:
+        return []
+    out: set[str] = set()
+    for w in iter_openalex_citing_works(oid, email=email):
+        raw = (w.get("doi") or "").strip()
+        nd = normalize_doi(raw)
+        if nd:
+            out.add(nd)
+    return sorted(out)
+
 def DownloadFileByUrl(DownloadUrl, FileTitle, subdirectory="main", teacher: str | None = None):
     """
     Downloads a file from a URL and saves it.
@@ -708,7 +766,105 @@ def DownloadFileByUrl(DownloadUrl, FileTitle, subdirectory="main", teacher: str 
             print(f"Failed to download file: {e}")
         return None
 
-def download_and_process_doi(doi, subdirectory="main", teacher: str | None = None):
+_folder_history_locks: dict[str, threading.Lock] = {}
+
+def _get_folder_history_lock(folder: str) -> threading.Lock:
+    # one lock per folder path
+    lock = _folder_history_locks.get(folder)
+    if lock is None:
+        lock = threading.Lock()
+        _folder_history_locks[folder] = lock
+    return lock
+
+def _extract_authors_from_meta(meta: dict | None) -> list[str]:
+    authors: list[str] = []
+    if not meta:
+        return authors
+    for a in meta.get('author') or []:
+        name = a.get('name')
+        if not name:
+            given = (a.get('given') or '').strip()
+            family = (a.get('family') or '').strip()
+            name = (given + ' ' + family).strip()
+        if name:
+            authors.append(name)
+    return authors
+
+def _extract_pub_year_month(meta: dict | None) -> tuple[int | None, int | None]:
+    def pick_date(m: dict, key: str):
+        obj = m.get(key) if m else None
+        parts = (obj or {}).get('date-parts') or []
+        if parts and isinstance(parts[0], list):
+            arr = parts[0]
+            year = arr[0] if len(arr) > 0 else None
+            month = arr[1] if len(arr) > 1 else None
+            return year, month
+        return None, None
+    if not meta:
+        return None, None
+    for k in ('published-print', 'published_online', 'published-online', 'issued'):
+        y, m = pick_date(meta, k)
+        if y:
+            return y, m
+    return None, None
+
+def _get_young_authors_from_meta(meta: dict | None, keywords: list[str] | None) -> list[str]:
+    if not meta:
+        return []
+    kw = [k.lower() for k in (keywords or DEFAULT_YOUNG_KEYWORDS)]
+    young: list[str] = []
+    for a in meta.get('author') or []:
+        affs = a.get('affiliation') or []
+        hit = False
+        for aff in affs:
+            name = (aff.get('name') or '').lower()
+            if any(k in name for k in kw):
+                hit = True
+                break
+        if hit:
+            name = a.get('name') or (f"{a.get('given','').strip()} {a.get('family','').strip()}".strip())
+            if name:
+                young.append(name)
+    return young
+
+def _update_folder_history(teacher: str | None, subdirectory: str, entry: dict):
+    folder_teacher = sanitize_folder_name(teacher or "sample")
+    folder = os.path.join(OUTPUT_ROOT_PDF, folder_teacher, subdirectory)
+    os.makedirs(folder, exist_ok=True)
+    path = os.path.join(folder, 'history.json')
+    lock = _get_folder_history_lock(folder)
+    with lock:
+        data = {"items": []}
+        try:
+            if os.path.exists(path):
+                with open(path, 'r', encoding='utf-8') as f:
+                    data = json.load(f) or {"items": []}
+        except Exception:
+            data = {"items": []}
+        items = data.get('items') if isinstance(data, dict) else None
+        if items is None:
+            data = {"items": []}
+            items = data['items']
+        # upsert by doi
+        doi = entry.get('doi')
+        updated = False
+        for i, it in enumerate(items):
+            if isinstance(it, dict) and it.get('doi') == doi:
+                items[i] = entry
+                updated = True
+                break
+        if not updated:
+            items.append(entry)
+        tmp = path + ".tmp"
+        try:
+            with open(tmp, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            os.replace(tmp, path)
+        except Exception:
+            # best-effort; ignore write error to not break download pipeline
+            pass
+
+def download_and_process_doi(doi, subdirectory="main", teacher: str | None = None, young_keywords: list[str] | None = None):
     """Helper function to get title, download, verify, and process one DOI."""
     if not production_mode:
         print(f"\n--- Processing DOI: {doi} ---")
@@ -772,6 +928,29 @@ def download_and_process_doi(doi, subdirectory="main", teacher: str | None = Non
         except Exception as e:
             if not production_mode:
                 print(f"Copy from cache to teacher folder failed: {e}")
+        # 写入该子目录的 history.json（使用 Crossref 元数据，避免遗漏）
+        try:
+            meta2 = get_crossref_metadata(doi)
+            authors = _extract_authors_from_meta(meta2)
+            y, m = _extract_pub_year_month(meta2)
+            young_list = _get_young_authors_from_meta(meta2, young_keywords)
+            # 被引列表（可能较慢，尽量保持鲁棒）
+            try:
+                cited_by = get_citing_dois_for_one(doi, email=OPENALEX_MAILTO)
+            except Exception:
+                cited_by = []
+            entry = {
+                "title": official_title,
+                "doi": normalize_doi(doi),
+                "references": [normalize_doi(r) for r in (hist.get('references') or references or []) if r],
+                "cited_by": cited_by,
+                "authors": authors,
+                "published": {"year": y, "month": m},
+                "young_authors": young_list,
+            }
+            _update_folder_history(teacher, subdirectory, entry)
+        except Exception:
+            pass
         # 尽量返回历史记录中的references，否则用当前解析
         return hist.get('references', []) or references or []
 
@@ -834,6 +1013,28 @@ def download_and_process_doi(doi, subdirectory="main", teacher: str | None = Non
                 'references': references,
                 'ts': datetime.utcnow().isoformat() + 'Z'
             })
+            # 写入子目录 history.json
+            try:
+                meta2 = get_crossref_metadata(doi)
+                authors = _extract_authors_from_meta(meta2)
+                y, m = _extract_pub_year_month(meta2)
+                young_list = _get_young_authors_from_meta(meta2, young_keywords)
+                try:
+                    cited_by = get_citing_dois_for_one(doi, email=OPENALEX_MAILTO)
+                except Exception:
+                    cited_by = []
+                entry = {
+                    "title": official_title,
+                    "doi": normalize_doi(doi),
+                    "references": [normalize_doi(r) for r in (references or []) if r],
+                    "cited_by": cited_by,
+                    "authors": authors,
+                    "published": {"year": y, "month": m},
+                    "young_authors": young_list,
+                }
+                _update_folder_history(teacher, subdirectory, entry)
+            except Exception:
+                pass
             return references
     
     # 下载失败也返回引用，让递归继续
@@ -867,7 +1068,7 @@ def download_with_references(initial_doi, depth=1, teacher: str | None = None):
             total_downloads += 1
             print(f"[{total_downloads}/{len(processed_dois) + len(dois_to_process)}] Processing DOI: {doi} at depth {current_depth}")
 
-        references = download_and_process_doi(doi, subdirectory, teacher)
+        references = download_and_process_doi(doi, subdirectory, teacher, None)
         if not references or not isinstance(references, list):
             continue
         # 去重，只添加未处理过的DOI
@@ -885,7 +1086,8 @@ def download_with_references_concurrent(initial_doi: str, depth: int = 1, max_wo
                                         young_filter: bool = False, young_depth: int = 2,
                                         young_keywords: list[str] | None = None,
                                         copy_ref1_young_to_ref2: bool = True,
-                                        teacher: str | None = None):
+                                        teacher: str | None = None,
+                                        cited: bool = True):
     """
     Concurrent BFS download: per depth level, download all DOIs concurrently, then expand to next level.
     """
@@ -908,7 +1110,7 @@ def download_with_references_concurrent(initial_doi: str, depth: int = 1, max_wo
 
         next_level = set()
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_map = {executor.submit(download_and_process_doi, doi, subdir, teacher): doi for doi in batch}
+            future_map = {executor.submit(download_and_process_doi, doi, subdir, teacher, young_keywords): doi for doi in batch}
             for fut in as_completed(future_map):
                 doi = future_map[fut]
                 try:
@@ -959,6 +1161,34 @@ def download_with_references_concurrent(initial_doi: str, depth: int = 1, max_wo
                     if not production_mode:
                         print(f"Error processing DOI {doi}: {e}")
                     processed_dois.add(doi)
+
+        # After finishing depth 0 (main), optionally fetch and download 'cited-by' set (no further recursion)
+        if d == 0 and cited:
+            try:
+                cited_set: set[str] = set()
+                for root_doi in batch:
+                    cdois = get_citing_dois_for_one(root_doi, email=OPENALEX_MAILTO)
+                    for cd in cdois:
+                        nd = normalize_doi(cd)
+                        if nd and nd not in processed_dois:
+                            cited_set.add(nd)
+                if cited_set:
+                    if production_mode:
+                        print(f"Depth 0: scheduling {len(cited_set)} cited-by downloads -> folder 'cited'")
+                    with ThreadPoolExecutor(max_workers=max_workers) as cexec:
+                        cmap = {cexec.submit(download_and_process_doi, cd, "cited", teacher, young_keywords): cd for cd in cited_set}
+                        for cfut in as_completed(cmap):
+                            cdoi = cmap[cfut]
+                            try:
+                                _ = cfut.result()  # ignore returned refs for cited
+                            except Exception as ce:
+                                if not production_mode:
+                                    print(f"Error processing cited-by DOI {cdoi}: {ce}")
+                            finally:
+                                processed_dois.add(cdoi)
+            except Exception as e:
+                if not production_mode:
+                    print(f"Failed to fetch/process cited-by DOIs: {e}")
 
         current_level = next_level
 
@@ -1022,12 +1252,16 @@ if __name__ == "__main__":
     parser.add_argument('--backoff', type=float, default=None, help='HTTP retry backoff factor (override default).')
     parser.add_argument('--timeout', type=float, default=None, help='HTTP request timeout in seconds (override default).')
     parser.add_argument('--unpaywall-email', type=str, default=None, help='Optional email for Unpaywall API to find OA PDFs.')
+    parser.add_argument('--openalex-email', type=str, default=None, help='Optional email (mailto) for OpenAlex requests when fetching cited-by DOIs.')
     parser.add_argument('--scihub-domains', type=str, default=None, help='Comma-separated Sci-Hub base URLs to try in order.')
     parser.add_argument('--from-results', type=str, nargs='?', const='AUTO', default='AUTO',
                         help='Read DOIs from results.txt and download into per-teacher folders. Optional custom path.')
     parser.add_argument('--pdf-root', type=str, default=None, help='Base output folder for PDFs (default ./Downloads_pdf).')
     parser.add_argument('--save-only-depth', type=int, default=None, help='Only save PDFs for this depth (0=main,1=ref1,2=ref2,...)')
     parser.add_argument('--max-pages', type=int, default=30, help='Maximum page count to download; skip if exceeded (default 30).')
+    # Cited-by control: enabled by default; use --no-cited to disable
+    parser.add_argument('--no-cited', dest='cited', action='store_false', help='Disable downloading cited-by (被引) articles for root DOIs. Enabled by default.')
+    parser.set_defaults(cited=True)
     args = parser.parse_args()
 
     if args.prod:
@@ -1050,6 +1284,7 @@ if __name__ == "__main__":
 
     # Optional integrations
     UNPAYWALL_EMAIL = args.unpaywall_email or None
+    OPENALEX_MAILTO = args.openalex_email or None
     if args.scihub_domains:
         SCIHUB_DOMAINS = [u.strip() for u in args.scihub_domains.split(',') if u.strip()]
     else:
@@ -1068,7 +1303,8 @@ if __name__ == "__main__":
                                                 young_filter=args.young, young_depth=args.young_depth,
                                                 young_keywords=yk,
                                                 copy_ref1_young_to_ref2=getattr(args, 'copy_ref1_young_to_ref2', True),
-                                                teacher=args.teacher)
+                                                teacher=args.teacher,
+                                                cited=args.cited)
         print("\n--- All requested DOI tasks completed. ---")
     else:
         # Default: read DOIs per teacher from results.txt
@@ -1089,7 +1325,8 @@ if __name__ == "__main__":
             download_with_references_concurrent(default_doi, depth=2, max_workers=args.workers,
                                                 young_filter=True, young_depth=2,
                                                 copy_ref1_young_to_ref2=True,
-                                                teacher='sample')
+                                                teacher='sample',
+                                                cited=args.cited)
             print("\n--- Task completed. ---")
         else:
             yk = [s.strip() for s in (args.young_keywords.split(',') if args.young_keywords else []) if s.strip()] or None
@@ -1106,5 +1343,6 @@ if __name__ == "__main__":
                                                         young_filter=args.young, young_depth=args.young_depth,
                                                         young_keywords=yk,
                                                         copy_ref1_young_to_ref2=getattr(args, 'copy_ref1_young_to_ref2', True),
-                                                        teacher=teacher_name)
+                                                        teacher=teacher_name,
+                                                        cited=args.cited)
             print("\n--- All teachers completed. ---")
