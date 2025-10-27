@@ -1,6 +1,6 @@
 import json
 from typing import Dict, Any, List
-from . import config
+import config
 from langchain_core.prompts import ChatPromptTemplate
 
 class FinalAnalyzer:
