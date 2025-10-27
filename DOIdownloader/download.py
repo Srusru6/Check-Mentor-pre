@@ -9,6 +9,7 @@ from urllib3.util.retry import Retry
 from functools import lru_cache
 from urllib.parse import unquote
 import json
+import shutil
 import time
 import threading
 from datetime import datetime
@@ -16,6 +17,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Global flag for production mode
 production_mode = False
+
+# Max pages threshold for downloading (configurable via CLI)
+MAX_PAGES = 30
 
 # Global HTTP session with retries
 session = requests.Session()
@@ -64,18 +68,26 @@ def http_get(url: str, *, timeout: float | None = None, headers=None, **kwargs):
         RATE_LIMITER.wait()
     return session.get(url, timeout=timeout or REQUEST_TIMEOUT, headers=headers or DEFAULT_HEADERS, **kwargs)
 
-# Persistent download history
-HISTORY_PATH = os.path.join(os.getcwd(), "Downloads_pdf", "sample", ".history.json")
+# Output roots (configurable via CLI)
+OUTPUT_ROOT_PDF = os.path.join(os.getcwd(), "Downloads_pdf")
+SAVE_ONLY_DEPTH: int | None = None  # if set, only save PDFs for this depth (0=main,1=ref1,2=ref2,...)
+
+# Persistent download history (centralized under OUTPUT_ROOT_PDF)
 _history_lock = threading.Lock()
 _history_cache = None
+
+def _history_path() -> str:
+    # Store a single global history to deduplicate downloads across teachers
+    return os.path.join(OUTPUT_ROOT_PDF, ".history.json")
 
 def _ensure_history_loaded():
     global _history_cache
     if _history_cache is None:
-        os.makedirs(os.path.dirname(HISTORY_PATH), exist_ok=True)
-        if os.path.exists(HISTORY_PATH):
+        os.makedirs(OUTPUT_ROOT_PDF, exist_ok=True)
+        hp = _history_path()
+        if os.path.exists(hp):
             try:
-                with open(HISTORY_PATH, 'r', encoding='utf-8') as f:
+                with open(hp, 'r', encoding='utf-8') as f:
                     _history_cache = json.load(f)
             except Exception:
                 _history_cache = {}
@@ -91,7 +103,7 @@ def history_set(doi: str, record: dict):
     with _history_lock:
         _history_cache[doi] = record
         try:
-            with open(HISTORY_PATH, 'w', encoding='utf-8') as f:
+            with open(_history_path(), 'w', encoding='utf-8') as f:
                 json.dump(_history_cache, f, ensure_ascii=False, indent=2)
         except Exception:
             pass
@@ -114,6 +126,15 @@ def configure_http(retries: int | None = None, backoff: float | None = None, tim
         new_adapter = HTTPAdapter(max_retries=new_strategy)
         session.mount("http://", new_adapter)
         session.mount("https://", new_adapter)
+
+def configure_outputs(pdf_root: str | None = None):
+    """Configure output roots (e.g., Downloads_pdf) and reset history cache if root changes."""
+    global OUTPUT_ROOT_PDF, _history_cache
+    if pdf_root:
+        new_root = os.path.abspath(pdf_root)
+        if OUTPUT_ROOT_PDF != new_root:
+            OUTPUT_ROOT_PDF = new_root
+            _history_cache = None  # force reload from new location
 
 def get_official_title_from_doi(doi):
     """
@@ -206,6 +227,27 @@ def normalize_doi(doi: str) -> str:
     doi = doi.strip().strip(' .;')
     return doi
 
+def sanitize_folder_name(name: str) -> str:
+    """Sanitize folder names for Windows/Unix compatibility."""
+    name = name.strip().replace('..', '.').strip()
+    return re.sub(r'[\\/:*?"<>|#&]', '_', name) or "unknown"
+
+def sanitize_file_title(title: str) -> str:
+    sane_title = re.sub(r'[\\/:*?"<>|#&]', '_', title)
+    sane_title = (sane_title[:150] + '..') if len(sane_title) > 150 else sane_title
+    return sane_title
+
+def subdir_to_depth(subdirectory: str) -> int:
+    if subdirectory == "main":
+        return 0
+    m = re.match(r"ref(\d+)$", subdirectory)
+    if m:
+        try:
+            return int(m.group(1))
+        except Exception:
+            return 0
+    return 0
+
 # CrossRef metadata cache
 @lru_cache(maxsize=1024)
 def get_crossref_metadata(doi: str) -> dict | None:
@@ -216,6 +258,41 @@ def get_crossref_metadata(doi: str) -> dict | None:
         return resp.json().get('message', {})
     except Exception:
         return None
+
+def estimate_page_count_from_metadata(meta: dict | None) -> int | None:
+    """Estimate page count from Crossref metadata.
+    Prefer 'number-of-pages' if present, otherwise parse 'page' range like 'S12-34' or '1–15'.
+    Returns None if not determinable.
+    """
+    if not meta or not isinstance(meta, dict):
+        return None
+    # Direct field if provided by Crossref
+    n = meta.get('number-of-pages') or meta.get('number_of_pages')
+    try:
+        if isinstance(n, int):
+            return n if n > 0 else None
+        if isinstance(n, str) and n.strip().isdigit():
+            v = int(n.strip())
+            return v if v > 0 else None
+    except Exception:
+        pass
+    # Parse 'page' string like '123-145', 'S5–S20', '1 — 32'
+    page_str = meta.get('page')
+    if isinstance(page_str, str) and page_str.strip():
+        # Extract numeric tokens and compute last - first + 1 when feasible
+        nums = [int(x) for x in re.findall(r"(\d+)", page_str)]
+        if len(nums) >= 2:
+            try:
+                start = nums[0]
+                end = nums[-1]
+                if end >= start:
+                    pages = end - start + 1
+                    # Defensive bounds: ignore absurdly large results from bad parsing
+                    if 1 <= pages <= 5000:
+                        return pages
+            except Exception:
+                return None
+    return None
 
 DEFAULT_YOUNG_KEYWORDS = [
     'student', 'phd', 'doctoral', 'candidate', 'undergraduate', 'master',
@@ -576,7 +653,7 @@ def get_pdf_from_unpaywall(doi: str, email: str | None) -> str | None:
             print(f"Unpaywall lookup failed: {e}")
     return None
 
-def DownloadFileByUrl(DownloadUrl, FileTitle, subdirectory="main"):
+def DownloadFileByUrl(DownloadUrl, FileTitle, subdirectory="main", teacher: str | None = None):
     """
     Downloads a file from a URL and saves it.
     Returns the full path to the saved file, or None if download fails.
@@ -587,13 +664,19 @@ def DownloadFileByUrl(DownloadUrl, FileTitle, subdirectory="main"):
         return None
 
     # Sanitize the file name to remove illegal characters
-    sane_title = re.sub(r'[\\/:*?"<>|#&]', '_', FileTitle)
-    # Prevent extremely long filenames
-    sane_title = (sane_title[:150] + '..') if len(sane_title) > 150 else sane_title
+    sane_title = sanitize_file_title(FileTitle)
     file_name = f"{sane_title}.pdf"
 
+    # If saving is restricted to a specific depth, skip others
+    if SAVE_ONLY_DEPTH is not None and subdir_to_depth(subdirectory) != SAVE_ONLY_DEPTH:
+        # We still consider the download logically successful for recursion, but do not persist or verify file
+        if not production_mode:
+            print(f"Skip saving (only depth={SAVE_ONLY_DEPTH}): {subdirectory}")
+        return None
+
     # Ensure the save path exists
-    save_path = os.path.join(os.getcwd(), "Downloads_pdf", "sample", subdirectory)
+    folder_teacher = sanitize_folder_name(teacher or "sample")
+    save_path = os.path.join(OUTPUT_ROOT_PDF, folder_teacher, subdirectory)
     os.makedirs(save_path, exist_ok=True)
     full_path = os.path.join(save_path, file_name)
 
@@ -625,7 +708,7 @@ def DownloadFileByUrl(DownloadUrl, FileTitle, subdirectory="main"):
             print(f"Failed to download file: {e}")
         return None
 
-def download_and_process_doi(doi, subdirectory="main"):
+def download_and_process_doi(doi, subdirectory="main", teacher: str | None = None):
     """Helper function to get title, download, verify, and process one DOI."""
     if not production_mode:
         print(f"\n--- Processing DOI: {doi} ---")
@@ -640,6 +723,19 @@ def download_and_process_doi(doi, subdirectory="main"):
     # 2. Get the title from the source page (this will be used for verification)
     page_title, references = GetTitleFromDOI(doi)
     
+    # 2.5 Page limit check using Crossref metadata
+    try:
+        meta = get_crossref_metadata(doi)
+        page_count = estimate_page_count_from_metadata(meta)
+        if page_count is not None and page_count > MAX_PAGES:
+            if not production_mode:
+                print(f"Skip download: page count {page_count} exceeds limit {MAX_PAGES}. DOI: {doi}")
+            # 不下载，且不再迭代引用
+            return []
+    except Exception as e:
+        if not production_mode:
+            print(f"Page count check failed (ignored): {e}")
+    
     # Use the official title for the filename for consistency
     if not production_mode:
         print(f"Using official title for filename: '{official_title}'")
@@ -650,6 +746,32 @@ def download_and_process_doi(doi, subdirectory="main"):
         # 文件已存在，直接返回引用（若历史中有）
         if production_mode:
             print(f"Cache hit: {hist.get('path')}")
+        # 若需要按老师分类且历史文件不在该老师目录，复制到目标老师目录
+        try:
+            if teacher:
+                # 在复制之前进行页数检查，避免复制超过阈值的已缓存论文
+                try:
+                    meta = get_crossref_metadata(doi)
+                    page_count = estimate_page_count_from_metadata(meta)
+                    if page_count is not None and page_count > MAX_PAGES:
+                        if not production_mode:
+                            print(f"Skip copying cached PDF: page count {page_count} exceeds limit {MAX_PAGES}. DOI: {doi}")
+                        # 不复制，且不再迭代引用
+                        return []
+                except Exception as e:
+                    if not production_mode:
+                        print(f"Page count check (cache copy) failed (ignored): {e}")
+                folder_teacher = sanitize_folder_name(teacher)
+                # 目标目录
+                target_dir = os.path.join(OUTPUT_ROOT_PDF, folder_teacher, subdirectory)
+                os.makedirs(target_dir, exist_ok=True)
+                desired_name = f"{sanitize_file_title(official_title)}.pdf"
+                dst_path = os.path.join(target_dir, desired_name)
+                if not os.path.exists(dst_path):
+                    shutil.copy2(hist['path'], dst_path)
+        except Exception as e:
+            if not production_mode:
+                print(f"Copy from cache to teacher folder failed: {e}")
         # 尽量返回历史记录中的references，否则用当前解析
         return hist.get('references', []) or references or []
 
@@ -681,7 +803,7 @@ def download_and_process_doi(doi, subdirectory="main"):
             return references or []
 
     # 4. Download the file
-    downloaded_file_path = DownloadFileByUrl(paperDownloadUrl, official_title, subdirectory)
+    downloaded_file_path = DownloadFileByUrl(paperDownloadUrl, official_title, subdirectory, teacher)
     
     # 5. Verify and Cleanup
     if downloaded_file_path:
@@ -708,6 +830,7 @@ def download_and_process_doi(doi, subdirectory="main"):
                 'title': official_title,
                 'path': downloaded_file_path,
                 'subdir': subdirectory,
+                'teacher': teacher or 'sample',
                 'references': references,
                 'ts': datetime.utcnow().isoformat() + 'Z'
             })
@@ -716,7 +839,7 @@ def download_and_process_doi(doi, subdirectory="main"):
     # 下载失败也返回引用，让递归继续
     return references or []
 
-def download_with_references(initial_doi, depth=1):
+def download_with_references(initial_doi, depth=1, teacher: str | None = None):
     """
     Downloads a paper and recursively downloads its references up to a specified depth.
     """
@@ -744,7 +867,7 @@ def download_with_references(initial_doi, depth=1):
             total_downloads += 1
             print(f"[{total_downloads}/{len(processed_dois) + len(dois_to_process)}] Processing DOI: {doi} at depth {current_depth}")
 
-        references = download_and_process_doi(doi, subdirectory)
+        references = download_and_process_doi(doi, subdirectory, teacher)
         if not references or not isinstance(references, list):
             continue
         # 去重，只添加未处理过的DOI
@@ -760,7 +883,9 @@ def download_with_references(initial_doi, depth=1):
 
 def download_with_references_concurrent(initial_doi: str, depth: int = 1, max_workers: int = 4,
                                         young_filter: bool = False, young_depth: int = 2,
-                                        young_keywords: list[str] | None = None):
+                                        young_keywords: list[str] | None = None,
+                                        copy_ref1_young_to_ref2: bool = True,
+                                        teacher: str | None = None):
     """
     Concurrent BFS download: per depth level, download all DOIs concurrently, then expand to next level.
     """
@@ -783,12 +908,36 @@ def download_with_references_concurrent(initial_doi: str, depth: int = 1, max_wo
 
         next_level = set()
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_map = {executor.submit(download_and_process_doi, doi, subdir): doi for doi in batch}
+            future_map = {executor.submit(download_and_process_doi, doi, subdir, teacher): doi for doi in batch}
             for fut in as_completed(future_map):
                 doi = future_map[fut]
                 try:
                     refs = fut.result() or []
                     processed_dois.add(doi)
+                    # 新增：默认将 ref1 层中判定为“年轻作者”的文章复制一份到 ref2 目录，便于集中查看。
+                    # 仅当允许保存 ref2 时才执行复制（与 SAVE_ONLY_DEPTH 兼容）
+                    if copy_ref1_young_to_ref2 and d == 1 and (SAVE_ONLY_DEPTH is None or SAVE_ONLY_DEPTH == 2):
+                        try:
+                            if paper_has_young_author(doi, young_keywords):
+                                # 从历史中找到已下载文件路径
+                                hist = history_get(doi) or {}
+                                src_path = hist.get('path')
+                                if src_path and os.path.exists(src_path):
+                                    # 目标目录为 ref2
+                                    folder_teacher = sanitize_folder_name(teacher or "sample")
+                                    target_dir = os.path.join(OUTPUT_ROOT_PDF, folder_teacher, f"ref{d+1}")
+                                    os.makedirs(target_dir, exist_ok=True)
+                                    dst_path = os.path.join(target_dir, os.path.basename(src_path))
+                                    if not os.path.exists(dst_path):
+                                        shutil.copy2(src_path, dst_path)
+                                        if not production_mode:
+                                            print(f"Copied young-author paper from ref1 to ref2: {os.path.basename(dst_path)}")
+                                else:
+                                    if not production_mode:
+                                        print(f"Skip copying (file not found for DOI): {doi}")
+                        except Exception as e:
+                            if not production_mode:
+                                print(f"Copy-to-ref2 failed for {doi}: {e}")
                     # 规范化引用DOI并去重
                     for r in refs:
                         r_norm = normalize_doi(r)
@@ -816,22 +965,69 @@ def download_with_references_concurrent(initial_doi: str, depth: int = 1, max_wo
     print(f"\n--- Concurrent iterative download complete. Total unique articles processed: {len(processed_dois)} ---")
 
 
+def parse_results_file(path: str) -> dict:
+    """Parse a results.txt file to extract mapping: teacher -> list of DOIs.
+    Expected blocks like:
+      --- 王剑威 (现代光学研究所) ---
+      1. 10.xxxx/xxxx
+      2. ...
+    """
+    teacher_to_dois: dict[str, list[str]] = {}
+    current_teacher: str | None = None
+    teacher_header = re.compile(r"^---\s*(.+?)\s*(?:\([^)]*\))?\s*---\s*$")
+    doi_regex = re.compile(r"10\.\d{4,9}/[-._;()/:A-Z0-9]+", re.I)
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            for raw in f:
+                line = raw.strip()
+                if not line:
+                    continue
+                m = teacher_header.match(line)
+                if m:
+                    current_teacher = m.group(1).strip()
+                    teacher_to_dois.setdefault(current_teacher, [])
+                    continue
+                if not current_teacher:
+                    continue
+                if "未能获取到任何DOI" in line:
+                    # keep empty list
+                    continue
+                for d in doi_regex.findall(line):
+                    nd = normalize_doi(d)
+                    if nd and nd not in teacher_to_dois[current_teacher]:
+                        teacher_to_dois[current_teacher].append(nd)
+    except FileNotFoundError:
+        print(f"results file not found: {path}")
+    except Exception as e:
+        print(f"Error parsing results file '{path}': {e}")
+    return teacher_to_dois
+
+
 # --- Main Execution ---
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Download scientific articles and their references.")
     parser.add_argument('--prod', action='store_true', help='Enable production mode for simplified output.')
     parser.add_argument('--doi', type=str, help='DOI(s) to download; comma or space separated.')
+    parser.add_argument('--teacher', type=str, default=None, help='Teacher name for output folder when using --doi (defaults to sample).')
     parser.add_argument('--depth', type=int, default=1, help='Depth for recursive reference download (>=0).')
     parser.add_argument('--workers', type=int, default=4, help='Max concurrent downloads per level.')
     parser.add_argument('--young', action='store_true', help='Enable filtering for young authors at a target depth (default depth=2).')
     parser.add_argument('--young-depth', type=int, default=2, help='Depth at which to apply young-author filtering (default 2).')
     parser.add_argument('--young-keywords', type=str, default=None, help='Comma-separated keywords to detect young authors in affiliations.')
+    # 默认启用将 ref1 的年轻作者文章复制到 ref2，可用该开关禁用
+    parser.add_argument('--no-copy-ref1-young-to-ref2', dest='copy_ref1_young_to_ref2', action='store_false',
+                        help='Disable copying young-author papers from ref1 to ref2 (enabled by default).')
     parser.add_argument('--rps', type=float, default=0.0, help='Global rate limit (requests per second). 0 = unlimited.')
     parser.add_argument('--retries', type=int, default=None, help='Total HTTP retries (override default).')
     parser.add_argument('--backoff', type=float, default=None, help='HTTP retry backoff factor (override default).')
     parser.add_argument('--timeout', type=float, default=None, help='HTTP request timeout in seconds (override default).')
     parser.add_argument('--unpaywall-email', type=str, default=None, help='Optional email for Unpaywall API to find OA PDFs.')
     parser.add_argument('--scihub-domains', type=str, default=None, help='Comma-separated Sci-Hub base URLs to try in order.')
+    parser.add_argument('--from-results', type=str, nargs='?', const='AUTO', default='AUTO',
+                        help='Read DOIs from results.txt and download into per-teacher folders. Optional custom path.')
+    parser.add_argument('--pdf-root', type=str, default=None, help='Base output folder for PDFs (default ./Downloads_pdf).')
+    parser.add_argument('--save-only-depth', type=int, default=None, help='Only save PDFs for this depth (0=main,1=ref1,2=ref2,...)')
+    parser.add_argument('--max-pages', type=int, default=30, help='Maximum page count to download; skip if exceeded (default 30).')
     args = parser.parse_args()
 
     if args.prod:
@@ -840,6 +1036,17 @@ if __name__ == "__main__":
 
     # Configure HTTP knobs from CLI
     configure_http(retries=args.retries, backoff=args.backoff, timeout=args.timeout, rps=args.rps)
+
+    # Configure outputs
+    configure_outputs(args.pdf_root)
+    # Restrict saving to a specific depth, if requested
+    SAVE_ONLY_DEPTH = args.save_only_depth
+    # Page count threshold
+    try:
+        if isinstance(args.max_pages, int) and args.max_pages > 0:
+            MAX_PAGES = args.max_pages
+    except Exception:
+        pass
 
     # Optional integrations
     UNPAYWALL_EMAIL = args.unpaywall_email or None
@@ -859,13 +1066,45 @@ if __name__ == "__main__":
             print(f"\n--- Target {i}/{len(dois)}: {d} ---")
             download_with_references_concurrent(d, depth=args.depth, max_workers=args.workers,
                                                 young_filter=args.young, young_depth=args.young_depth,
-                                                young_keywords=yk)
+                                                young_keywords=yk,
+                                                copy_ref1_young_to_ref2=getattr(args, 'copy_ref1_young_to_ref2', True),
+                                                teacher=args.teacher)
         print("\n--- All requested DOI tasks completed. ---")
     else:
-        # Default behavior: Production mode + download one DOI with depth=2 and young-author filter at depth 2
-        production_mode = True
-        default_doi = '10.1126/science.177.4047.393'
-        print("\n=== Default: Download main + level-1 & level-2 references (young-author filter at level 2) ===")
-        download_with_references_concurrent(default_doi, depth=2, max_workers=args.workers,
-                                            young_filter=True, young_depth=2)
-        print("\n--- Task completed. ---")
+        # Default: read DOIs per teacher from results.txt
+        # Determine results path
+        results_path = None
+        if args.from_results and args.from_results != 'AUTO':
+            results_path = args.from_results
+        else:
+            # default to DOIdownloader/results.txt next to this script
+            results_path = os.path.join(os.path.dirname(__file__), 'results.txt')
+
+        print(f"\n=== Reading DOIs from: {results_path} ===")
+        mapping = parse_results_file(results_path)
+        if not mapping:
+            print("No DOIs found in results file. Falling back to example DOI.")
+            production_mode = True
+            default_doi = '10.1038/nphys4074'
+            download_with_references_concurrent(default_doi, depth=2, max_workers=args.workers,
+                                                young_filter=True, young_depth=2,
+                                                copy_ref1_young_to_ref2=True,
+                                                teacher='sample')
+            print("\n--- Task completed. ---")
+        else:
+            yk = [s.strip() for s in (args.young_keywords.split(',') if args.young_keywords else []) if s.strip()] or None
+            for teacher_name, dois in mapping.items():
+                if not dois:
+                    if not production_mode:
+                        print(f"Skipping teacher '{teacher_name}': no DOIs.")
+                    continue
+                    
+                print(f"\n=== Teacher: {teacher_name} | {len(dois)} DOI(s) | depth={args.depth}, workers={args.workers} ===")
+                for i, d in enumerate(dois, 1):
+                    print(f"\n--- {teacher_name} [{i}/{len(dois)}]: {d} ---")
+                    download_with_references_concurrent(d, depth=args.depth, max_workers=args.workers,
+                                                        young_filter=args.young, young_depth=args.young_depth,
+                                                        young_keywords=yk,
+                                                        copy_ref1_young_to_ref2=getattr(args, 'copy_ref1_young_to_ref2', True),
+                                                        teacher=teacher_name)
+            print("\n--- All teachers completed. ---")
