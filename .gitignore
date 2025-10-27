@@ -1,8 +1,3 @@
-__pycache__
-
-*.zip
-*.json
-*.jpg
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.pyc
@@ -73,3 +68,6 @@ venv.bak/
 .idea/
 .vscode/
 *.pdf
+*.zip
+*.json
+*.jpg
