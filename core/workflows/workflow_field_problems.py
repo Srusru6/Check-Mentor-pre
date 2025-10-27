@@ -213,9 +213,9 @@ The output MUST be a valid JSON object where:
 
 Example Input:
 [
-  {"title": "Paper A", "identified_problem": "scalable quantum entanglement"},
-  {"title": "Paper B", "identified_problem": "generating multi-photon entangled states"},
-  {"title": "Paper C", "identified_problem": "topological protection on photonic chips"}
+  {{"title": "Paper A", "identified_problem": "scalable quantum entanglement"}},
+  {{"title": "Paper B", "identified_problem": "generating multi-photon entangled states"}},
+  {{"title": "Paper C", "identified_problem": "topological protection on photonic chips"}}
 ]
 
 Example Output:
@@ -246,11 +246,13 @@ Example Output:
         
         if not main_papers:
              print("  -> No main papers provided. Cannot determine professor name for cache.")
-             cache_filename = "default_field_problems_analysis_cache.json"
+             # Fallback to a default name if no papers are provided
+             professor_name = "default_professor"
         else:
-            cache_filename = f"{main_papers[0]['authors'][0]}_field_problems_analysis_cache.json"
-        self.cache = CacheManager(cache_filename)
-        print(f"  -> Cache file set to: {self.cache.cache_path}")
+            professor_name = main_papers[0]['authors'][0]
+
+        self.cache = CacheManager(professor_name, "field_problems_analysis")
+        print(f"  -> Cache file set for professor '{professor_name}' in workflow 'field_problems_analysis'.")
 
         all_papers = main_papers + ref1_papers
         
@@ -349,7 +351,7 @@ Example Output:
             
             # 去重，因为一篇论文可能属于多个聚类
             # 使用字典来去重，保持顺序
-            final_papers_for_synthesis = list({p["id"]: p for p in representative_papers}.values())
+            final_papers_for_synthesis = list({p["paper_id"]: p for p in representative_papers}.values())
             print(f"  -> Clustered into {len(clusters)} themes. Selected {len(final_papers_for_synthesis)} representative papers for final synthesis.")
             top_papers = final_papers_for_synthesis
         else:
