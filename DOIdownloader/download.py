@@ -4,6 +4,7 @@ import re
 from bs4 import BeautifulSoup
 import Levenshtein
 import argparse
+import configparser
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from functools import lru_cache
@@ -17,6 +18,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Global flag for production mode
 production_mode = False
+
+# Verification level: 'strict' (default, fetch DOI page), 'light' (use Crossref fast path), 'off' (skip)
+VERIFY_LEVEL = 'strict'
+
+# Behavior flag: when true, do not download PDFs for main layer; only filter main, then download ref1 and cited
+ONLY_REF1_AND_CITED = False
 
 # Max pages threshold for downloading (configurable via CLI)
 MAX_PAGES = 30
@@ -44,6 +51,14 @@ UNPAYWALL_EMAIL: str | None = None
 SCIHUB_DOMAINS: list[str] | None = None
 OPENALEX_MAILTO: str | None = None
 OPENALEX_BASE = "https://api.openalex.org"
+# Impact factor / selection config
+TOP_N: int | None = None  # legacy: used as fallback for ref/cited if specific values absent
+TOP_N_MAIN: int | None = None
+TOP_N_REF: int | None = None
+TOP_N_CITED: int | None = None
+IMPACT_FACTORS: dict = {}
+RECENT_YEARS: int | None = None
+
 
 # Simple global rate limiter (shared among threads)
 class RateLimiter:
@@ -128,6 +143,20 @@ def configure_http(retries: int | None = None, backoff: float | None = None, tim
         new_adapter = HTTPAdapter(max_retries=new_strategy)
         session.mount("http://", new_adapter)
         session.mount("https://", new_adapter)
+
+def configure_http_pool(pool_connections: int | None = None, pool_maxsize: int | None = None):
+    """Configure HTTP connection pool sizes (useful when increasing --workers)."""
+    # Re-mount adapters with custom pool sizes if provided
+    kwargs = {}
+    if pool_connections is not None:
+        kwargs['pool_connections'] = int(pool_connections)
+    if pool_maxsize is not None:
+        kwargs['pool_maxsize'] = int(pool_maxsize)
+    if not kwargs:
+        return
+    new_adapter = HTTPAdapter(max_retries=retry_strategy, **kwargs)
+    session.mount("http://", new_adapter)
+    session.mount("https://", new_adapter)
 
 def configure_outputs(pdf_root: str | None = None):
     """Configure output roots (e.g., Downloads_pdf) and reset history cache if root changes."""
@@ -242,6 +271,9 @@ def sanitize_file_title(title: str) -> str:
 def subdir_to_depth(subdirectory: str) -> int:
     if subdirectory == "main":
         return 0
+    if subdirectory == "cited":
+        # Treat cited as depth 1 for the purpose of SAVE_ONLY_DEPTH so that --save-only-depth 1 saves ref1 and cited
+        return 1
     m = re.match(r"ref(\d+)$", subdirectory)
     if m:
         try:
@@ -323,61 +355,79 @@ def GetTitleFromDOI(DOI):
     doi_url = f"https://doi.org/{DOI}"
     headers = DEFAULT_HEADERS
 
-    # Try fetching title from DOI website
-    try:
-        response = http_get(doi_url, headers=headers, timeout=REQUEST_TIMEOUT)
-        if not production_mode:
-            print("DOI URL Status Code:", response.status_code)
-        if response.status_code == 200:
-            if not production_mode:
-                print("DOI URL Response Text:", response.text[:500])  # Print first 500 characters of the response
-            references = ExtractReferences(response.text)  # Extract references
-            soup = BeautifulSoup(response.text, 'html.parser')
-            title_tag = soup.find('title')
-            if not production_mode:
-                print("Extracted Title Tag:", title_tag)
-            if title_tag and title_tag.text:
-                return title_tag.text.strip(), references
-    except Exception as e:
-        if not production_mode:
-            print(f"Error fetching title from DOI: {e}")
+    # Strategy order depends on VERIFY_LEVEL for speed/robustness
+    # light/off: Crossref first (fast and structured), strict: DOI landing first (for stricter verification)
+    try_crossref_first = (VERIFY_LEVEL in ('light', 'off'))
 
-    # Fallback: Try CrossRef API
-    try:
-        crossref_url = f"https://api.crossref.org/works/{DOI}"
-        response = http_get(crossref_url, headers=headers, timeout=REQUEST_TIMEOUT)
-        if not production_mode:
-            print("CrossRef API Status Code:", response.status_code)
-        if response.status_code == 200:
-            data = response.json()
-            title = data.get('message', {}).get('title', [None])[0]
-            references = [item.get('DOI') for item in data.get('message', {}).get('reference', []) if item.get('DOI')]
-            if title:
+    # Helper: fetch via Crossref
+    def _try_crossref():
+        try:
+            crossref_url = f"https://api.crossref.org/works/{DOI}"
+            response = http_get(crossref_url, headers=headers, timeout=REQUEST_TIMEOUT)
+            if not production_mode:
+                print("CrossRef API Status Code:", response.status_code)
+            if response.status_code == 200:
+                data = response.json()
+                title = data.get('message', {}).get('title', [None])[0]
+                references = [item.get('DOI') for item in data.get('message', {}).get('reference', []) if item.get('DOI')]
+                if title:
+                    if not production_mode:
+                        print("Extracted Title from CrossRef:", title)
+                        print("Extracted References from CrossRef:", references)
+                    return title, references
+        except Exception as e:
+            if not production_mode:
+                print(f"Error fetching title from CrossRef API: {e}")
+        return None
+
+    # Helper: fetch via DOI landing page
+    def _try_doi_page():
+        try:
+            response = http_get(doi_url, headers=headers, timeout=REQUEST_TIMEOUT)
+            if not production_mode:
+                print("DOI URL Status Code:", response.status_code)
+            if response.status_code == 200:
                 if not production_mode:
-                    print("Extracted Title from CrossRef:", title)
-                    print("Extracted References from CrossRef:", references)
-                return title, references
-    except Exception as e:
-        if not production_mode:
-            print(f"Error fetching title from CrossRef API: {e}")
-
-    # Fallback: Try Sci-Hub page
-    try:
-        sci_hub_url = f"https://sci-hub.se/{DOI}"
-        response = http_get(sci_hub_url, headers=headers, timeout=REQUEST_TIMEOUT)
-        if not production_mode:
-            print("Sci-Hub URL Status Code:", response.status_code)
-        if response.status_code == 200:
-            references = ExtractReferences(response.text)  # Extract references
-            soup = BeautifulSoup(response.text, 'html.parser')
-            title_tag = soup.find('title')
+                    print("DOI URL Response Text:", response.text[:500])
+                references = ExtractReferences(response.text)
+                soup = BeautifulSoup(response.text, 'html.parser')
+                title_tag = soup.find('title')
+                if not production_mode:
+                    print("Extracted Title Tag:", title_tag)
+                if title_tag and title_tag.text:
+                    return title_tag.text.strip(), references
+        except Exception as e:
             if not production_mode:
-                print("Extracted Title Tag from Sci-Hub:", title_tag)
-            if title_tag and title_tag.text:
-                return title_tag.text.strip(), references
-    except Exception as e:
-        if not production_mode:
-            print(f"Error fetching title from Sci-Hub: {e}")
+                print(f"Error fetching title from DOI: {e}")
+        return None
+
+    # Helper: fetch via Sci-Hub
+    def _try_scihub():
+        try:
+            sci_hub_url = f"https://sci-hub.se/{DOI}"
+            response = http_get(sci_hub_url, headers=headers, timeout=REQUEST_TIMEOUT)
+            if not production_mode:
+                print("Sci-Hub URL Status Code:", response.status_code)
+            if response.status_code == 200:
+                references = ExtractReferences(response.text)
+                soup = BeautifulSoup(response.text, 'html.parser')
+                title_tag = soup.find('title')
+                if not production_mode:
+                    print("Extracted Title Tag from Sci-Hub:", title_tag)
+                if title_tag and title_tag.text:
+                    return title_tag.text.strip(), references
+        except Exception as e:
+            if not production_mode:
+                print(f"Error fetching title from Sci-Hub: {e}")
+        return None
+
+    # Execution order
+    if try_crossref_first:
+        out = _try_crossref() or _try_doi_page() or _try_scihub()
+    else:
+        out = _try_doi_page() or _try_crossref() or _try_scihub()
+    if out:
+        return out
 
     return "unknown_title", []
 
@@ -699,17 +749,115 @@ def iter_openalex_citing_works(openalex_id: str, email: str | None = None):
             break
         params["cursor"] = next_cursor
 
-def get_citing_dois_for_one(doi: str, email: str | None = None) -> list[str]:
+def get_citing_dois_for_one(doi: str, email: str | None = None, min_year: int | None = None) -> list[str]:
     oid = get_openalex_id_for_doi(doi, email=email)
     if not oid:
         return []
     out: set[str] = set()
     for w in iter_openalex_citing_works(oid, email=email):
+        if min_year is not None:
+            try:
+                wy = int(w.get("publication_year") or 0)
+                if wy and wy < min_year:
+                    continue
+            except Exception:
+                pass
         raw = (w.get("doi") or "").strip()
         nd = normalize_doi(raw)
         if nd:
             out.add(nd)
     return sorted(out)
+
+
+def _load_impact_factors(path: str) -> dict:
+    try:
+        if path and os.path.exists(path):
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                # Expect mapping of issn/title(lower)->float
+                return {k.lower(): float(v) for k, v in data.items()}
+    except Exception:
+        pass
+    return {}
+
+
+def _get_impact_for_meta(meta: dict | None) -> float | None:
+    """Try to find an impact factor from IMPACT_FACTORS using ISSN(s) or container-title.
+    Return numeric impact or None if not found."""
+    if not meta:
+        return None
+    # ISSN from Crossref may be in 'ISSN' or 'issn'
+    issns = meta.get('ISSN') or meta.get('issn') or []
+    for issn in issns:
+        v = IMPACT_FACTORS.get(issn.lower())
+        if v is not None:
+            return v
+    # try container-title
+    ct = ''
+    try:
+        ct = ((meta.get('container-title') or []) + (meta.get('container_title') or []) )
+    except Exception:
+        ct = meta.get('container-title') or []
+    if isinstance(ct, list) and ct:
+        name = ct[0].lower()
+        v = IMPACT_FACTORS.get(name)
+        if v is not None:
+            return v
+    # fallback: try title of journal if available
+    journal = (meta.get('short-container-title') or [])
+    if isinstance(journal, list) and journal:
+        v = IMPACT_FACTORS.get(journal[0].lower())
+        if v is not None:
+            return v
+    return None
+
+
+def _score_for_doi(doi: str) -> float:
+    """Return a numeric score for ranking based on article citation count (Crossref is-referenced-by-count)."""
+    meta = get_crossref_metadata(doi)
+    if not meta:
+        return 0.0
+    cnt = meta.get('is-referenced-by-count') or 0
+    try:
+        return float(cnt)
+    except Exception:
+        return 0.0
+
+
+def _select_top_n(dois: list[str], n: int) -> list[str]:
+    if not dois or n is None or n <= 0:
+        return dois
+    scored = []
+    for d in dois:
+        try:
+            s = _score_for_doi(d)
+        except Exception:
+            s = 0.0
+        scored.append((s, d))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [d for _, d in scored[:n]]
+
+
+def _min_year_cutoff() -> int | None:
+    if RECENT_YEARS is None or RECENT_YEARS <= 0:
+        return None
+    try:
+        return datetime.now().year - RECENT_YEARS + 1
+    except Exception:
+        return None
+
+
+def _is_recent_doi(doi: str, min_year: int | None) -> bool:
+    if min_year is None:
+        return True
+    meta = get_crossref_metadata(doi)
+    if not meta:
+        return False
+    y, _m = _extract_pub_year_month(meta)
+    try:
+        return (y or 0) >= min_year
+    except Exception:
+        return False
 
 def DownloadFileByUrl(DownloadUrl, FileTitle, subdirectory="main", teacher: str | None = None):
     """
@@ -741,26 +889,41 @@ def DownloadFileByUrl(DownloadUrl, FileTitle, subdirectory="main", teacher: str 
     try:
         if not production_mode:
             print(f"Downloading from: {DownloadUrl}")
-        r = http_get(DownloadUrl, timeout=60, headers=DEFAULT_HEADERS) # Increased timeout for large files
-        r.raise_for_status()
+        # Stream the response to reduce memory footprint and start writing early
+        dl_headers = {**DEFAULT_HEADERS, "Accept": "application/pdf,application/octet-stream;q=0.9,*/*;q=0.8"}
+        with session.get(DownloadUrl, timeout=60, headers=dl_headers, stream=True) as r:
+            r.raise_for_status()
 
-        # Crucial check: Ensure we are actually downloading a PDF
-        content_type = (r.headers.get('Content-Type') or '').lower()
-        is_pdf = ('pdf' in content_type) or (r.content[:4] == b'%PDF')
-        if not is_pdf:
-            if not production_mode:
-                print(f"Error: The content at the URL is not a PDF. Content-Type: {r.headers.get('Content-Type')}")
-                print("Skipping download.")
-            return None
+            content_type = (r.headers.get('Content-Type') or '').lower()
+            first_chunk = None
+            wrote_any = False
+            with open(full_path, "wb") as code:
+                for chunk in r.iter_content(chunk_size=1024 * 256):  # 256KB chunks
+                    if not chunk:
+                        continue
+                    if first_chunk is None:
+                        first_chunk = chunk
+                        # Validate PDF content early
+                        is_pdf = ('pdf' in content_type) or (first_chunk[:4] == b'%PDF')
+                        if not is_pdf:
+                            if not production_mode:
+                                print(f"Error: The content at the URL is not a PDF. Content-Type: {r.headers.get('Content-Type')}")
+                                print("Skipping download.")
+                            return None
+                        code.write(first_chunk)
+                        wrote_any = True
+                        continue
+                    code.write(chunk)
+                    wrote_any = True
 
-        with open(full_path, "wb") as code:
-            code.write(r.content)
-        
         if production_mode:
             print(f"Downloaded: {file_name}")
         else:
-            print(f"File '{file_name}' has been downloaded successfully to '{save_path}'.")
-        return full_path
+            if wrote_any:
+                print(f"File '{file_name}' has been downloaded successfully to '{save_path}'.")
+            else:
+                print(f"Download produced no data for '{file_name}'.")
+        return full_path if wrote_any else None
     except requests.exceptions.RequestException as e:
         if not production_mode:
             print(f"Failed to download file: {e}")
@@ -864,7 +1027,7 @@ def _update_folder_history(teacher: str | None, subdirectory: str, entry: dict):
             # best-effort; ignore write error to not break download pipeline
             pass
 
-def download_and_process_doi(doi, subdirectory="main", teacher: str | None = None, young_keywords: list[str] | None = None):
+def download_and_process_doi(doi, subdirectory="main", teacher: str | None = None, young_keywords: list[str] | None = None, *, download_pdf: bool = True):
     """Helper function to get title, download, verify, and process one DOI."""
     if not production_mode:
         print(f"\n--- Processing DOI: {doi} ---")
@@ -934,16 +1097,9 @@ def download_and_process_doi(doi, subdirectory="main", teacher: str | None = Non
             authors = _extract_authors_from_meta(meta2)
             y, m = _extract_pub_year_month(meta2)
             young_list = _get_young_authors_from_meta(meta2, young_keywords)
-            # 被引列表（可能较慢，尽量保持鲁棒）
-            try:
-                cited_by = get_citing_dois_for_one(doi, email=OPENALEX_MAILTO)
-            except Exception:
-                cited_by = []
             entry = {
                 "title": official_title,
                 "doi": normalize_doi(doi),
-                "references": [normalize_doi(r) for r in (hist.get('references') or references or []) if r],
-                "cited_by": cited_by,
                 "authors": authors,
                 "published": {"year": y, "month": m},
                 "young_authors": young_list,
@@ -951,8 +1107,15 @@ def download_and_process_doi(doi, subdirectory="main", teacher: str | None = Non
             _update_folder_history(teacher, subdirectory, entry)
         except Exception:
             pass
-        # 尽量返回历史记录中的references，否则用当前解析
-        return hist.get('references', []) or references or []
+        # 返回当前解析的引用列表用于递归
+        return references or []
+
+    # If configured to skip downloading for main layer (only filter main), return references directly
+    if not download_pdf and subdirectory == "main":
+        if not production_mode:
+            print("Skip main PDF download per setting; returning references only.")
+        # 仍然返回引用以便后续生成 ref1 与 cited
+        return references or []
 
     # 3. Attempt to get a download URL
     paperDownloadUrl = None
@@ -986,9 +1149,14 @@ def download_and_process_doi(doi, subdirectory="main", teacher: str | None = Non
     
     # 5. Verify and Cleanup
     if downloaded_file_path:
-        # Compare the official title with the title scraped from the download page
-        is_verified = verify_title_similarity(official_title, page_title)
-        
+        if VERIFY_LEVEL == 'off':
+            if not production_mode:
+                print("Verification disabled; keeping downloaded file.")
+            is_verified = True
+        else:
+            # Compare the official title with the title scraped from the download page
+            is_verified = verify_title_similarity(official_title, page_title)
+
         if not is_verified:
             if not production_mode:
                 print(f"Verification failed. Deleting downloaded file: {downloaded_file_path}")
@@ -1010,7 +1178,6 @@ def download_and_process_doi(doi, subdirectory="main", teacher: str | None = Non
                 'path': downloaded_file_path,
                 'subdir': subdirectory,
                 'teacher': teacher or 'sample',
-                'references': references,
                 'ts': datetime.utcnow().isoformat() + 'Z'
             })
             # 写入子目录 history.json
@@ -1019,15 +1186,9 @@ def download_and_process_doi(doi, subdirectory="main", teacher: str | None = Non
                 authors = _extract_authors_from_meta(meta2)
                 y, m = _extract_pub_year_month(meta2)
                 young_list = _get_young_authors_from_meta(meta2, young_keywords)
-                try:
-                    cited_by = get_citing_dois_for_one(doi, email=OPENALEX_MAILTO)
-                except Exception:
-                    cited_by = []
                 entry = {
                     "title": official_title,
                     "doi": normalize_doi(doi),
-                    "references": [normalize_doi(r) for r in (references or []) if r],
-                    "cited_by": cited_by,
                     "authors": authors,
                     "published": {"year": y, "month": m},
                     "young_authors": young_list,
@@ -1110,7 +1271,11 @@ def download_with_references_concurrent(initial_doi: str, depth: int = 1, max_wo
 
         next_level = set()
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_map = {executor.submit(download_and_process_doi, doi, subdir, teacher, young_keywords): doi for doi in batch}
+            # 当仅下载 ref1 与 cited 时，在 main 层不下载 PDF，仅提取引用
+            if ONLY_REF1_AND_CITED and d == 0:
+                future_map = {executor.submit(download_and_process_doi, doi, subdir, teacher, young_keywords, download_pdf=False): doi for doi in batch}
+            else:
+                future_map = {executor.submit(download_and_process_doi, doi, subdir, teacher, young_keywords): doi for doi in batch}
             for fut in as_completed(future_map):
                 doi = future_map[fut]
                 try:
@@ -1140,7 +1305,8 @@ def download_with_references_concurrent(initial_doi: str, depth: int = 1, max_wo
                         except Exception as e:
                             if not production_mode:
                                 print(f"Copy-to-ref2 failed for {doi}: {e}")
-                    # 规范化引用DOI并去重
+                    # 规范化引用DOI并去重；先收集父条目的所有候选项，以便按 TOP_N（若配置）与近 m 年筛选
+                    candidates: list[str] = []
                     for r in refs:
                         r_norm = normalize_doi(r)
                         if not r_norm or r_norm in processed_dois:
@@ -1156,6 +1322,25 @@ def download_with_references_concurrent(initial_doi: str, depth: int = 1, max_wo
                                 if not production_mode:
                                     print(f"Young-author check error for {r_norm}: {e}")
                                 continue
+                        # 若配置了近 m 年，并且目标是生成 ref1（d+1==1），按年份过滤
+                        if (d + 1) == 1:
+                            cut = _min_year_cutoff()
+                            if cut is not None and not _is_recent_doi(r_norm, cut):
+                                if not production_mode:
+                                    print(f"Filtered (older than {cut}): {r_norm}")
+                                continue
+                        candidates.append(r_norm)
+
+                    # 如果在生成 ref{d+1}（例如 ref1）阶段启用了 TOP_N，则对该父条目的候选按影响因子/引用数排序并取前 N
+                    if TOP_N_REF and (d + 1) == 1:
+                        try:
+                            chosen = _select_top_n(candidates, TOP_N_REF)
+                        except Exception:
+                            chosen = candidates
+                    else:
+                        chosen = candidates
+
+                    for r_norm in chosen:
                         next_level.add(r_norm)
                 except Exception as e:
                     if not production_mode:
@@ -1167,9 +1352,20 @@ def download_with_references_concurrent(initial_doi: str, depth: int = 1, max_wo
             try:
                 cited_set: set[str] = set()
                 for root_doi in batch:
-                    cdois = get_citing_dois_for_one(root_doi, email=OPENALEX_MAILTO)
-                    for cd in cdois:
-                        nd = normalize_doi(cd)
+                    try:
+                        cdois = get_citing_dois_for_one(root_doi, email=OPENALEX_MAILTO, min_year=_min_year_cutoff())
+                    except Exception:
+                        cdois = []
+                    # apply per-root TOP_N filtering when configured
+                    cdois_norm = [normalize_doi(x) for x in cdois if normalize_doi(x) and normalize_doi(x) not in processed_dois]
+                    if TOP_N_CITED:
+                        try:
+                            pick = _select_top_n(cdois_norm, TOP_N_CITED)
+                        except Exception:
+                            pick = cdois_norm
+                    else:
+                        pick = cdois_norm
+                    for nd in pick:
                         if nd and nd not in processed_dois:
                             cited_set.add(nd)
                 if cited_set:
@@ -1197,13 +1393,17 @@ def download_with_references_concurrent(initial_doi: str, depth: int = 1, max_wo
 
 def parse_results_file(path: str) -> dict:
     """Parse a results.txt file to extract mapping: teacher -> list of DOIs.
-    Expected blocks like:
-      --- 王剑威 (现代光学研究所) ---
+    Supports formats like:
+      --- 姓名 (机构) ---
+      OpenAlex Profile: <url>
+      Combined DOIs (N found):
       1. 10.xxxx/xxxx
       2. ...
+    Lines without DOIs are ignored. DOIs are detected anywhere in the line.
     """
     teacher_to_dois: dict[str, list[str]] = {}
     current_teacher: str | None = None
+    # Header like: --- 姓名 (机构) ---  or  --- 姓名 ---
     teacher_header = re.compile(r"^---\s*(.+?)\s*(?:\([^)]*\))?\s*---\s*$")
     doi_regex = re.compile(r"10\.\d{4,9}/[-._;()/:A-Z0-9]+", re.I)
     try:
@@ -1219,9 +1419,15 @@ def parse_results_file(path: str) -> dict:
                     continue
                 if not current_teacher:
                     continue
-                if "未能获取到任何DOI" in line:
+                # Skip obviously non-DOI lines
+                if (
+                    line.lower().startswith("openalex profile:") or
+                    line.lower().startswith("combined dois") or
+                    "未能获取到任何DOI" in line
+                ):
                     # keep empty list
                     continue
+                # Extract any DOIs found in this line
                 for d in doi_regex.findall(line):
                     nd = normalize_doi(d)
                     if nd and nd not in teacher_to_dois[current_teacher]:
@@ -1251,8 +1457,17 @@ if __name__ == "__main__":
     parser.add_argument('--retries', type=int, default=None, help='Total HTTP retries (override default).')
     parser.add_argument('--backoff', type=float, default=None, help='HTTP retry backoff factor (override default).')
     parser.add_argument('--timeout', type=float, default=None, help='HTTP request timeout in seconds (override default).')
+    parser.add_argument('--pool-maxsize', type=int, default=None, help='HTTP connection pool max size; defaults to ~workers*4 when not set.')
     parser.add_argument('--unpaywall-email', type=str, default=None, help='Optional email for Unpaywall API to find OA PDFs.')
     parser.add_argument('--openalex-email', type=str, default=None, help='Optional email (mailto) for OpenAlex requests when fetching cited-by DOIs.')
+    parser.add_argument('--verify', type=str, choices=['strict', 'light', 'off'], default='strict', help='Verification strategy: strict (default), light (Crossref-first), or off (skip).')
+    parser.add_argument('--no-rank-main', action='store_true', help='Do not rank/sort main DOIs by Crossref citation count (faster).')
+    parser.add_argument('--top-n', type=int, default=None, help='Legacy: keep top N for ref1/cited by citation count; overrides config.ini when specific values are not set')
+    parser.add_argument('--top-n-main', type=int, default=None, help='Keep top N main DOIs by citation count; overrides config.ini')
+    parser.add_argument('--top-n-ref', type=int, default=None, help='Keep top N ref1 DOIs by citation count; overrides config.ini')
+    parser.add_argument('--top-n-cited', type=int, default=None, help='Keep top N cited DOIs by citation count; overrides config.ini')
+    parser.add_argument('--impact-factors', type=str, default=None, help='Path to JSON file mapping ISSN or journal name to impact factor; overrides config.ini')
+    parser.add_argument('--recent-years', type=int, default=None, help='Only keep articles within the last M years for ref1 and cited; overrides config.ini')
     parser.add_argument('--scihub-domains', type=str, default=None, help='Comma-separated Sci-Hub base URLs to try in order.')
     parser.add_argument('--from-results', type=str, nargs='?', const='AUTO', default='AUTO',
                         help='Read DOIs from results.txt and download into per-teacher folders. Optional custom path.')
@@ -1261,6 +1476,8 @@ if __name__ == "__main__":
     parser.add_argument('--max-pages', type=int, default=30, help='Maximum page count to download; skip if exceeded (default 30).')
     # Cited-by control: enabled by default; use --no-cited to disable
     parser.add_argument('--no-cited', dest='cited', action='store_false', help='Disable downloading cited-by (被引) articles for root DOIs. Enabled by default.')
+    # New: only filter main, and download ref1 & cited results
+    parser.add_argument('--only-ref1-cited', action='store_true', help='先筛选 main，不下载 main PDF；仅下载 ref1 与 cited 的筛选结果。')
     parser.set_defaults(cited=True)
     args = parser.parse_args()
 
@@ -1270,6 +1487,12 @@ if __name__ == "__main__":
 
     # Configure HTTP knobs from CLI
     configure_http(retries=args.retries, backoff=args.backoff, timeout=args.timeout, rps=args.rps)
+    # Configure HTTP pool sizes based on workers (if not explicitly provided)
+    try:
+        pool_sz = args.pool_maxsize if args.pool_maxsize is not None else max(10, int(args.workers) * 4)
+        configure_http_pool(pool_connections=pool_sz, pool_maxsize=pool_sz)
+    except Exception:
+        pass
 
     # Configure outputs
     configure_outputs(args.pdf_root)
@@ -1285,6 +1508,52 @@ if __name__ == "__main__":
     # Optional integrations
     UNPAYWALL_EMAIL = args.unpaywall_email or None
     OPENALEX_MAILTO = args.openalex_email or None
+    # Verification level
+    try:
+        VERIFY_LEVEL = args.verify
+    except Exception:
+        VERIFY_LEVEL = 'strict'
+    # Behavior
+    ONLY_REF1_AND_CITED = bool(getattr(args, 'only_ref1_cited', False))
+    # Load config.ini defaults (if present) and possibly override with CLI
+    cfg = configparser.ConfigParser()
+    cfg.read(os.path.join(os.getcwd(), 'config.ini'))
+    cfg_top_n = None
+    cfg_top_n_main = None
+    cfg_top_n_ref = None
+    cfg_top_n_cited = None
+    cfg_ifpath = None
+    cfg_recent_years = None
+    try:
+        if cfg.has_section('download'):
+            cfg_top_n = cfg.getint('download', 'top_n', fallback=None)  # legacy
+            cfg_top_n_main = cfg.getint('download', 'top_n_main', fallback=None)
+            cfg_top_n_ref = cfg.getint('download', 'top_n_ref', fallback=None)
+            cfg_top_n_cited = cfg.getint('download', 'top_n_cited', fallback=None)
+            cfg_ifpath = cfg.get('download', 'impact_factors', fallback='').strip() or None
+            ry = cfg.get('download', 'recent_years', fallback='').strip()
+            cfg_recent_years = int(ry) if ry.isdigit() else None
+    except Exception:
+        cfg_top_n = None
+        cfg_ifpath = None
+    # Final top_n and impact_factors path
+    impact_factors_path = args.impact_factors or cfg_ifpath
+    # Top-N resolution with precedence: specific CLI > specific config > legacy CLI (--top-n) > legacy config (top_n)
+    final_top_n_main = args.top_n_main if args.top_n_main is not None else cfg_top_n_main
+    final_top_n_ref = args.top_n_ref if args.top_n_ref is not None else cfg_top_n_ref
+    final_top_n_cited = args.top_n_cited if args.top_n_cited is not None else cfg_top_n_cited
+    legacy_n = args.top_n if args.top_n is not None else cfg_top_n
+    TOP_N_MAIN = final_top_n_main if final_top_n_main is not None else None
+    TOP_N_REF = final_top_n_ref if final_top_n_ref is not None else legacy_n
+    TOP_N_CITED = final_top_n_cited if final_top_n_cited is not None else legacy_n
+    # Keep legacy TOP_N for any remaining internal fallback uses
+    TOP_N = legacy_n
+    IMPACT_FACTORS = _load_impact_factors(impact_factors_path) if impact_factors_path else {}
+    # Set recent years window
+    try:
+        RECENT_YEARS = args.recent_years if args.recent_years is not None else cfg_recent_years
+    except Exception:
+        RECENT_YEARS = None
     if args.scihub_domains:
         SCIHUB_DOMAINS = [u.strip() for u in args.scihub_domains.split(',') if u.strip()]
     else:
@@ -1294,7 +1563,19 @@ if __name__ == "__main__":
     if args.doi:
         # 支持逗号或空白分隔的多DOI输入
         raw = [p.strip() for p in re.split(r'[\s,]+', args.doi) if p.strip()]
-        dois = [normalize_doi(d) for d in raw]
+        two_all = [normalize_doi(d) for d in raw]
+        # Apply recent-years and Top-N for main layer
+        cut_main = _min_year_cutoff()
+        dois_recent = [d for d in two_all if _is_recent_doi(d, cut_main)] if cut_main is not None else list(two_all)
+        # Rank by citation count unless disabled
+        if getattr(args, 'no_rank_main', False):
+            base_list = dois_recent
+        else:
+            base_list = sorted(dois_recent, key=lambda x: _score_for_doi(x), reverse=True)
+        if TOP_N_MAIN is not None and TOP_N_MAIN > 0:
+            dois = base_list[:TOP_N_MAIN]
+        else:
+            dois = base_list
         print(f"\n=== Running for {len(dois)} DOI(s) with depth={args.depth}, workers={args.workers} ===")
         yk = [s.strip() for s in (args.young_keywords.split(',') if args.young_keywords else []) if s.strip()] or None
         for i, d in enumerate(dois, 1):
@@ -1330,15 +1611,30 @@ if __name__ == "__main__":
             print("\n--- Task completed. ---")
         else:
             yk = [s.strip() for s in (args.young_keywords.split(',') if args.young_keywords else []) if s.strip()] or None
-            for teacher_name, dois in mapping.items():
-                if not dois:
+            for teacher_name, dois_all in mapping.items():
+                if not dois_all:
                     if not production_mode:
                         print(f"Skipping teacher '{teacher_name}': no DOIs.")
                     continue
-                    
-                print(f"\n=== Teacher: {teacher_name} | {len(dois)} DOI(s) | depth={args.depth}, workers={args.workers} ===")
-                for i, d in enumerate(dois, 1):
-                    print(f"\n--- {teacher_name} [{i}/{len(dois)}]: {d} ---")
+                # Apply recent-years and Top-N for main layer per teacher
+                cut_main = _min_year_cutoff()
+                dois_recent = [d for d in dois_all if _is_recent_doi(d, cut_main)] if cut_main is not None else list(dois_all)
+                # Rank by citation count unless disabled
+                if getattr(args, 'no_rank_main', False):
+                    base_list = dois_recent
+                else:
+                    base_list = sorted(dois_recent, key=lambda x: _score_for_doi(x), reverse=True)
+                if TOP_N_MAIN is not None and TOP_N_MAIN > 0:
+                    selected = base_list[:TOP_N_MAIN]
+                else:
+                    selected = base_list
+                if not selected:
+                    if not production_mode:
+                        print(f"Skipping teacher '{teacher_name}': no DOIs after recent-years/top-N filtering.")
+                    continue
+                print(f"\n=== Teacher: {teacher_name} | {len(selected)}/{len(dois_all)} selected main DOI(s) | depth={args.depth}, workers={args.workers} ===")
+                for i, d in enumerate(selected, 1):
+                    print(f"\n--- {teacher_name} [{i}/{len(selected)}]: {d} ---")
                     download_with_references_concurrent(d, depth=args.depth, max_workers=args.workers,
                                                         young_filter=args.young, young_depth=args.young_depth,
                                                         young_keywords=yk,

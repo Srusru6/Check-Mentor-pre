@@ -39,9 +39,10 @@ python download.py [--prod] [--doi DOI1,DOI2] [--teacher NAME]
 							 [--depth N] [--workers K] [--save-only-depth D]
 							 [--young] [--young-depth L] [--young-keywords KW1,KW2]
 							 [--no-copy-ref1-young-to-ref2]
-							 [--rps R] [--retries T] [--backoff B] [--timeout S]
+					 [--rps R] [--retries T] [--backoff B] [--timeout S] [--pool-maxsize P]
 							 [--unpaywall-email you@domain] [--openalex-email you@domain]
-							 [--scihub-domains URL1,URL2] [--no-cited]
+				 [--scihub-domains URL1,URL2] [--no-cited] [--only-ref1-cited]
+				 [--verify strict|light|off] [--no-rank-main]
 ```
 
 - --prod：开启生产模式（精简日志）。
@@ -60,10 +61,24 @@ python download.py [--prod] [--doi DOI1,DOI2] [--teacher NAME]
 - --retries：HTTP 重试次数（覆盖内置默认）。
 - --backoff：HTTP 重试退避因子（覆盖内置默认）。
 - --timeout：HTTP 请求超时时间（秒，覆盖内置默认）。
+- --pool-maxsize：HTTP 连接池大小（默认 ≈ workers×4）。增大可提升并发下载时的吞吐。
 - --unpaywall-email：用于调用 Unpaywall API 的联系邮箱（优先寻找 OA PDF）。
 - --openalex-email：用于调用 OpenAlex API（用于“被引”DOI 查询）的 mailto 邮箱。
 - --scihub-domains：自定义 Sci-Hub 镜像列表（逗号分隔），按顺序尝试。
 - --no-cited：关闭默认的“被引”下载（默认开启）。
+- --only-ref1-cited：先筛选 main（应用近 M 年与 Top-N），不下载 main 层 PDF；仅下载 ref1 与 cited 的筛选结果。
+- --top-n：对 ref1 与 cited 的候选文章按“被引用次数”（Crossref 的 is-referenced-by-count）排序后取前 N。
+- --recent-years：只保留近 M 年的文章（ref1 与 cited 候选）。
+ - --verify：下载校验策略。
+	 - strict（默认）：优先访问 DOI 落地页获取标题，再比对 Crossref 官方标题（较慢但更严格）。
+	 - light：优先使用 Crossref 标题与参考文献（更快，通常足够）。
+	 - off：关闭标题校验（最快，可能增加误判风险）。
+ - --no-rank-main：main 层不按被引次数排序（可显著减少 Crossref 请求，从而加速）。
+
+可选分层 Top-N 参数（如不提供则读取 config.ini）：
+- --top-n-main：main 层（根 DOI）按被引次数排序选前 N。
+- --top-n-ref：ref1 层（每个根条目的参考文献）按被引次数排序选前 N。
+- --top-n-cited：cited 层（每个根条目的被引）按被引次数排序选前 N。
 
 ### 常用示例（Windows PowerShell）
 
@@ -75,19 +90,49 @@ python download.py --depth 1 --workers 4
 python download.py --from-results d:\programs\checkmentor\Check-Mentor\DOIdownloader\results.txt --pdf-root d:\data\Downloads_pdf --depth 2 --workers 6 --prod
 ```
 
-2) 指定单个 DOI，深度为 2，并发 6，在第 2 层进行年轻作者筛选：
+`results.txt` 支持如下结构（非 DOI 行会自动忽略）：
+
+```
+--- 姓名 (机构) ---
+OpenAlex Profile: https://openalex.org/...
+Combined DOIs (10 found):
+1. 10.1007/jhep08(2011)018
+2. 10.1016/j.physletb.2009.02.015
+...
+```
+
+同一老师名下可列多行 DOI，解析器会从任何含 DOI 的行中提取。
+
+Top-N 选择说明：
+- 本工具中“影响因子”即指“文章被引用次数”（Crossref 字段 is-referenced-by-count），不使用期刊影响因子。
+- 选择顺序为：先按年份过滤（近 M 年），再按被引次数排序取 Top-N。
+
+配置项（config.ini -> [download]）：
+- top_n_main：main 层 Top-N（默认 10）
+- top_n_ref：ref1 层 Top-N（默认 100）
+- top_n_cited：cited 层 Top-N（默认 100）
+- recent_years：近 M 年（默认 3）
+- impact_factors：期刊影响因子映射（当前版本已忽略，可留空）
+
+2) 仅下载 ref1 与 cited（不下载 main PDF），先对 main 进行筛选后展开：
+
+```powershell
+python download.py --from-results AUTO --depth 1 --only-ref1-cited --workers 4
+```
+
+3) 指定单个 DOI，深度为 2，并发 6，在第 2 层进行年轻作者筛选：
 
 ```powershell
 python download.py --doi 10.1038/s41586-024-00000-0 --teacher 王剑威 --depth 2 --workers 6 --young --young-depth 2
 ```
 
-3) 多个 DOI（逗号或空格均可），关闭年轻作者筛选：
+4) 多个 DOI（逗号或空格均可），关闭年轻作者筛选：
 
 ```powershell
 python download.py --doi "10.1038/xxxx, 10.1126/yyyy" --teacher sample --depth 1 --workers 4
 ```
 
-4) 指定 Unpaywall 邮箱和自定义 Sci-Hub 镜像：
+5) 指定 Unpaywall 邮箱和自定义 Sci-Hub 镜像：
 
 ```powershell
 python download.py --doi 10.1126/science.177.4047.393 --depth 0 --unpaywall-email you@domain.com --scihub-domains https://sci-hub.se,https://sci-hub.st,https://sci-hub.ru
@@ -148,5 +193,5 @@ Downloads_pdf/
 
 - 学术资源请遵循相应的版权与使用政策，仅用于个人学习研究。
 - Sci-Hub 页面结构可能变化，代码已做多种选择器兜底；如失效，可反馈或更新解析逻辑。
-- CrossRef 元数据缓存为内存 LRU，后续可扩展为磁盘缓存以减少重复请求。
+- CrossRef 元数据缓存为内存 LRU；可通过 `--no-rank-main` 显著减少排序请求；并可适当增大 `--workers` 与 `--pool-maxsize` 提升吞吐（视网络环境与站点限流而定）。
 
