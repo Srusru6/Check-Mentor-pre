@@ -5,7 +5,7 @@ Workflow 3: 分析本科生可参与的项目
 "有哪些适合本科生参与的科研项目？"
 
 它通过以下步骤实现：
-1. 接收关键参考文献（ref1_papers）和潜在项目文献（ref2_papers）作为输入。
+1. 接收关键参考文献（ref1_papers）和潜在项目文献（cited_papers）作为输入。
 2. 设计一个AI评估机制，从“工作复杂度”和“本科生友好度”两个维度对每篇论文进行打分。
 3. 基于得分适中的论文，提炼出潜在的、可操作性强的本科生科研项目点。
 """
@@ -181,10 +181,87 @@ Your final output MUST be a JSON object with the following structure:
         
         return evaluation_result
 
+    def _cluster_papers_by_llm(self, papers: List[Dict[str, Any]]) -> Dict[str, List[str]]:
+        """
+        使用LLM对论文进行语义聚类。
+        """
+        print("    -> High-quality paper count exceeds threshold. Performing LLM-based semantic clustering...")
+
+        paper_info = [
+            {"title": p.get("title", "N/A"), "project_idea": p.get("project_idea", "N/A")}
+            for p in papers
+        ]
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are a senior research analyst. You have been given a list of papers, each with its title and a proposed undergraduate project idea. Your task is to group these papers into 3-5 high-level project themes based on the **semantic similarity** of their project ideas.
+
+Your task is **clustering, not summarization**.
+
+The output MUST be a valid JSON object where:
+- Each KEY is a concise, descriptive name for a project theme you identified (e.g., "Quantum Device Simulation", "Optical System Design").
+- Each VALUE is a list of paper titles that belong to that theme.
+
+Example Input:
+[
+  {{"title": "Paper A", "project_idea": "simulate quantum entanglement on a chip"}},
+  {{"title": "Paper B", "project_idea": "design multi-photon source"}},
+  {{"title": "Paper C", "project_idea": "build topological waveguide simulator"}}
+]
+
+Example Output:
+{{
+  "Quantum Simulation Projects": ["Paper A"],
+  "Photonic Device Design": ["Paper B", "Paper C"]
+}}"""),
+            ("user", "Here is the list of papers to cluster:\n\n{paper_info_json}")
+        ])
+
+        parser = JsonOutputParser()
+        chain = prompt | self.llm | parser
+
+        try:
+            paper_info_json = json.dumps(paper_info, indent=2, ensure_ascii=False)
+            cluster_result = chain.invoke({"paper_info_json": paper_info_json})
+            return cluster_result
+        except Exception as e:
+            print(f"    ⚠️ Error during LLM clustering: {e}")
+            # Fallback: if clustering fails, return a single group to avoid crashing
+            return {"All Suitable Papers": [p["title"] for p in papers]}
+
     def _synthesize_project_suggestions(self, suitable_papers: List[Dict[str, Any]]) -> str:
         """
         基于筛选出的论文，综合生成一份项目建议总结。
+        如果论文过多，会进行聚类和代表性采样。
         """
+        # 如果合适的论文过多，进行聚类和代表性采样
+        papers_for_synthesis = suitable_papers
+        
+        if len(suitable_papers) > 10:
+            print(f"    -> Found {len(suitable_papers)} suitable papers. Performing clustering and representative sampling...")
+            
+            # 1. LLM语义聚类
+            clusters = self._cluster_papers_by_llm(suitable_papers)
+            
+            # 2. 代表性提取：从每个主题中选择加权得分最高的论文
+            representative_papers = []
+            paper_map = {p["title"]: p for p in suitable_papers}
+            
+            for theme, titles in clusters.items():
+                if not titles: continue
+                
+                # 找到该主题下加权得分最高的论文
+                theme_papers = [paper_map[title] for title in titles if title in paper_map]
+                if not theme_papers: continue
+                
+                best_paper_in_theme = max(theme_papers, key=lambda p: p.get("weighted_score", 0))
+                representative_papers.append(best_paper_in_theme)
+            
+            # 去重
+            papers_for_synthesis = list({p["paper_id"]: p for p in representative_papers}.values())
+            print(f"    -> Clustered into {len(clusters)} themes. Selected {len(papers_for_synthesis)} representative papers for synthesis.")
+        else:
+            print(f"    -> Number of suitable papers ({len(suitable_papers)}) is manageable. Using all for synthesis.")
+        
         prompt = ChatPromptTemplate.from_template("""You are a helpful academic advisor. Based on a list of papers suitable for undergraduates, create a summary of potential research project areas.
 
 The evaluated papers are provided below:
@@ -199,18 +276,18 @@ Synthesized Summary of Project Suggestions:""")
 
         chain = prompt | self.llm
 
-        papers_json_str = json.dumps(suitable_papers, indent=2, ensure_ascii=False)
+        papers_json_str = json.dumps(papers_for_synthesis, indent=2, ensure_ascii=False)
 
         synthesis_result = chain.invoke({"papers_json": papers_json_str})
         return synthesis_result.content
 
-    def run(self, professor_name: str, ref2_papers: List[Dict[str, Any]], contribution_summary: str) -> Dict[str, Any]:
+    def run(self, professor_name: str, cited_papers: List[Dict[str, Any]], contribution_summary: str) -> Dict[str, Any]:
         """
         执行分析本科生项目的完整流程。
         """
         self.cache = CacheManager(professor_name, "undergrad_projects_analysis")
-        all_papers = ref2_papers
-        print(f"  -> Running UndergradProjectsWorkflow on {len(all_papers)} papers (ref2 only).")
+        all_papers = cited_papers
+        print(f"  -> Running UndergradProjectsWorkflow on {len(all_papers)} papers (cited only).")
 
         if not all_papers:
             print("  -> No papers provided. Skipping workflow.")

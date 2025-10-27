@@ -2,7 +2,7 @@
 工作流编排器 (Workflow Orchestrator)
 
 该模块是新架构的核心，负责：
-1. 接收分离后的数据源（main_papers, ref1_papers, ref2_papers）。
+1. 接收分离后的数据源（main_papers, ref1_papers, cited_papers）。
 2. 初始化并调用三个独立的工作流，分别处理三个核心问题。
 3. 收集每个工作流的分析结果。
 4. 将整合后的结果返回给主流程，用于最终报告的生成。
@@ -107,7 +107,7 @@ class WorkflowOrchestrator:
         """
         为指定目录加载元数据文件（如果存在）
         
-        元数据文件应命名为 'metadata.json' 并位于论文目录中
+        元数据文件应命名为 'metadata.json' 或 'history.json' 并位于论文目录中
         
         Args:
             dir_path: 论文目录路径
@@ -115,13 +115,20 @@ class WorkflowOrchestrator:
         Returns:
             是否成功加载元数据
         """
+        # 优先尝试 history.json（新格式）
+        history_file = dir_path / "history.json"
+        if history_file.exists():
+            print(f"    📋 发现元数据文件: {history_file.name}")
+            return self.metadata_manager.load_metadata_file(history_file)
+        
+        # 回退到 metadata.json（旧格式）
         metadata_file = dir_path / "metadata.json"
         if metadata_file.exists():
             print(f"    📋 发现元数据文件: {metadata_file.name}")
             return self.metadata_manager.load_metadata_file(metadata_file)
-        else:
-            print(f"    ℹ️  未找到元数据文件 (metadata.json)")
-            return False
+        
+        print(f"    ℹ️  未找到元数据文件 (history.json 或 metadata.json)")
+        return False
 
     def run(self):
         """
@@ -137,7 +144,12 @@ class WorkflowOrchestrator:
         print("\n🔍 检查并加载元数据文件...")
         main_path = base_data_path / "main"
         ref1_path = base_data_path / "ref1"
-        ref2_path = base_data_path / "ref2"
+        cited_path = base_data_path / "cited"
+        # 向后兼容：若新目录不存在但旧目录存在，则回退到旧目录
+        legacy_ref2_path = base_data_path / "ref2"
+        if not cited_path.exists() and legacy_ref2_path.exists():
+            print("  ⚠️  兼容模式：未找到 'cited' 目录，检测到旧目录 'ref2'，将临时使用 'ref2'。请尽快迁移数据到 'cited/'.")
+            cited_path = legacy_ref2_path
         
         print(f"  [Main] {main_path}")
         self._load_metadata_for_directory(main_path)
@@ -145,8 +157,8 @@ class WorkflowOrchestrator:
         print(f"  [Ref1] {ref1_path}")
         self._load_metadata_for_directory(ref1_path)
         
-        print(f"  [Ref2] {ref2_path}")
-        self._load_metadata_for_directory(ref2_path)
+        print(f"  [Cited] {cited_path}")
+        self._load_metadata_for_directory(cited_path)
         
         # 打印元数据统计
         if len(self.metadata_manager.metadata_cache) > 0:
@@ -159,30 +171,30 @@ class WorkflowOrchestrator:
 
         if self.test_mode:
             print(f"  -> 运行在测试模式: 教授代表作将完整加载 ({len(main_papers)}篇) 以保证分析准确性。")
-            print(f"  -> 其余数据源 (ref1, ref2) 最多处理 {limit} 篇论文。")
+            print(f"  -> 其余数据源 (ref1, cited) 最多处理 {limit} 篇论文。")
             ref1_papers = self._load_papers_from_dir(str(ref1_path), "Various Authors", limit)
-            ref2_papers = self._load_papers_from_dir(str(ref2_path), "Various Authors", limit)
+            cited_papers = self._load_papers_from_dir(str(cited_path), "Various Authors", limit)
         else:
             ref1_papers = self._load_papers_from_dir(str(ref1_path), "Various Authors")
-            ref2_papers = self._load_papers_from_dir(str(ref2_path), "Various Authors")
+            cited_papers = self._load_papers_from_dir(str(cited_path), "Various Authors")
         
         # 为论文添加元数据信息
         print("\n📝 为论文添加元数据...")
         main_papers = self.metadata_manager.get_papers_with_metadata(main_papers)
         ref1_papers = self.metadata_manager.get_papers_with_metadata(ref1_papers)
-        ref2_papers = self.metadata_manager.get_papers_with_metadata(ref2_papers)
+        cited_papers = self.metadata_manager.get_papers_with_metadata(cited_papers)
         
         # 按发布时间对论文进行排序（更新的论文在前）
         if len(self.metadata_manager.metadata_cache) > 0:
             print("  ✓ 按发布时间对论文进行排序（新→旧）...")
             main_papers = self.metadata_manager.sort_papers_by_recency(main_papers, descending=True)
             ref1_papers = self.metadata_manager.sort_papers_by_recency(ref1_papers, descending=True)
-            ref2_papers = self.metadata_manager.sort_papers_by_recency(ref2_papers, descending=True)
+            cited_papers = self.metadata_manager.sort_papers_by_recency(cited_papers, descending=True)
 
         print("  -> 数据源分离完成:")
         print(f"    - 教授代表作 (main): {len(main_papers)} 篇")
         print(f"    - 引用文献 (ref1): {len(ref1_papers)} 篇")
-        print(f"    - 潜在项目文献 (ref2): {len(ref2_papers)} 篇")
+        print(f"    - 潜在项目文献 (cited): {len(cited_papers)} 篇")
 
         # 创建日志目录
         log_dir = "log"
@@ -224,7 +236,7 @@ class WorkflowOrchestrator:
         contribution_summary = contribution_results.get("contribution_summary", "")
         undergrad_projects_results = self.undergrad_projects_workflow.run(
             self.professor_name, 
-            ref2_papers,
+            cited_papers,
             contribution_summary
         )
         log_workflow_output("undergrad_projects", undergrad_projects_results)

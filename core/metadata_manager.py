@@ -5,11 +5,9 @@
 - DOI (论文唯一标识符)
 - 作者列表
 - 发布时间
-- 青年学者索引 (第一位青年学者在作者列表中的位置)
 
 元数据的应用包括：
 - 按发布时间对论文进行排序和加权
-- 识别青年学者的贡献
 - 提供更准确的论文信息
 """
 import json
@@ -25,8 +23,8 @@ class PaperMetadata:
         self,
         doi: str = "",
         authors: List[str] = None,
-        publish_date: str = "",
-        young_scholar_index: int = -1
+        publish_year: Optional[int] = None,
+        publish_month: Optional[int] = None
     ):
         """
         初始化论文元数据
@@ -34,31 +32,62 @@ class PaperMetadata:
         Args:
             doi: 论文的DOI标识符
             authors: 作者列表
-            publish_date: 发布时间 (ISO格式字符串, 如 "2024-01-15")
-            young_scholar_index: 第一位青年学者在作者列表中的索引，-1表示无青年学者
+            publish_year: 发布年份
+            publish_month: 发布月份
         """
         self.doi = doi
         self.authors = authors if authors is not None else []
-        self.publish_date = publish_date
-        self.young_scholar_index = young_scholar_index
+        self.publish_year = publish_year
+        self.publish_month = publish_month
     
     def to_dict(self) -> Dict[str, Any]:
-        """转换为字典格式"""
-        return {
+        """转换为字典格式（向后兼容）"""
+        result = {
             "doi": self.doi,
             "authors": self.authors,
-            "publish_date": self.publish_date,
-            "young_scholar_index": self.young_scholar_index
         }
+        
+        # 新格式：published 字典
+        if self.publish_year is not None:
+            result["published"] = {"year": self.publish_year}
+            if self.publish_month is not None:
+                result["published"]["month"] = self.publish_month
+        
+        # 向后兼容：添加 publish_date 字符串（用于现有的工作流代码）
+        if self.publish_year is not None:
+            if self.publish_month is not None:
+                # 如果有月份，生成 YYYY-MM 格式
+                result["publish_date"] = f"{self.publish_year}-{self.publish_month:02d}"
+            else:
+                # 如果只有年份，生成 YYYY 格式
+                result["publish_date"] = str(self.publish_year)
+        
+        return result
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'PaperMetadata':
         """从字典创建元数据对象"""
+        publish_year = None
+        publish_month = None
+        
+        # 处理新格式：published 字典
+        if "published" in data and isinstance(data["published"], dict):
+            publish_year = data["published"].get("year")
+            publish_month = data["published"].get("month")
+        # 兼容旧格式：publish_date 字符串
+        elif "publish_date" in data and isinstance(data["publish_date"], str):
+            try:
+                date = datetime.fromisoformat(data["publish_date"])
+                publish_year = date.year
+                publish_month = date.month
+            except (ValueError, AttributeError):
+                pass
+        
         return cls(
             doi=data.get("doi", ""),
             authors=data.get("authors", []),
-            publish_date=data.get("publish_date", ""),
-            young_scholar_index=data.get("young_scholar_index", -1)
+            publish_year=publish_year,
+            publish_month=publish_month
         )
     
     def get_publish_year(self) -> Optional[int]:
@@ -66,29 +95,22 @@ class PaperMetadata:
         获取发布年份
         
         Returns:
-            发布年份，如果日期无效则返回 None
+            发布年份，如果没有则返回 None
         """
-        if not self.publish_date:
-            return None
-        try:
-            return datetime.fromisoformat(self.publish_date).year
-        except (ValueError, AttributeError):
-            return None
+        return self.publish_year
     
-    def has_young_scholar(self) -> bool:
-        """检查是否有青年学者参与"""
-        return self.young_scholar_index >= 0
-    
-    def get_young_scholar_name(self) -> Optional[str]:
+    def get_publish_date_str(self) -> str:
         """
-        获取青年学者姓名
+        获取发布日期字符串
         
         Returns:
-            青年学者姓名，如果没有则返回 None
+            格式化的日期字符串
         """
-        if self.has_young_scholar() and self.young_scholar_index < len(self.authors):
-            return self.authors[self.young_scholar_index]
-        return None
+        if self.publish_year is None:
+            return "未知"
+        if self.publish_month is not None:
+            return f"{self.publish_year}-{self.publish_month:02d}"
+        return str(self.publish_year)
     
     def get_recency_score(self, reference_year: Optional[int] = None) -> float:
         """
@@ -135,6 +157,10 @@ class MetadataManager:
         """
         从JSON文件加载元数据
         
+        支持两种格式：
+        1. 新格式（items数组）：{"items": [{title, doi, authors, published: {year, month}}]}
+        2. 旧格式（文件名映射）：{"filename.md": {doi, authors, publish_date}}
+        
         Args:
             metadata_file: 元数据JSON文件路径
             
@@ -149,26 +175,38 @@ class MetadataManager:
             with open(metadata_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             
-            # 假设元数据文件格式为:
-            # {
-            #   "paper_filename_1.md": {
-            #     "doi": "...",
-            #     "authors": [...],
-            #     "publish_date": "...",
-            #     "young_scholar_index": ...
-            #   },
-            #   ...
-            # }
+            # 检测是否为新格式（包含items数组）
+            if isinstance(data, dict) and "items" in data:
+                # 新格式：{"items": [{"title": "...", "doi": "...", ...}]}
+                items = data.get("items", [])
+                for item in items:
+                    if not isinstance(item, dict):
+                        continue
+                    
+                    # 使用title作为文件名（需要添加.md扩展名）
+                    title = item.get("title", "")
+                    if not title:
+                        continue
+                    
+                    # 将title转换为有效的文件名
+                    filename = f"{title}.md"
+                    
+                    metadata = PaperMetadata.from_dict(item)
+                    self.metadata_cache[filename] = metadata
             
-            for filename, metadata_dict in data.items():
-                metadata = PaperMetadata.from_dict(metadata_dict)
-                self.metadata_cache[filename] = metadata
+            elif isinstance(data, dict):
+                # 旧格式：{"filename.md": {"doi": "...", ...}}
+                for filename, metadata_dict in data.items():
+                    metadata = PaperMetadata.from_dict(metadata_dict)
+                    self.metadata_cache[filename] = metadata
             
             print(f"    ✓ 已加载 {len(self.metadata_cache)} 条元数据记录")
             return True
             
         except Exception as e:
             print(f"    ⚠️  加载元数据文件失败: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     def get_metadata(self, paper_filename: str) -> Optional[PaperMetadata]:
@@ -301,8 +339,7 @@ class MetadataManager:
             统计信息字典
         """
         total = len(self.metadata_cache)
-        with_dates = sum(1 for m in self.metadata_cache.values() if m.publish_date)
-        with_young_scholars = sum(1 for m in self.metadata_cache.values() if m.has_young_scholar())
+        with_dates = sum(1 for m in self.metadata_cache.values() if m.publish_year is not None)
         
         years = [m.get_publish_year() for m in self.metadata_cache.values()]
         valid_years = [y for y in years if y is not None]
@@ -310,7 +347,6 @@ class MetadataManager:
         stats = {
             "total_papers": total,
             "papers_with_dates": with_dates,
-            "papers_with_young_scholars": with_young_scholars,
             "year_range": (min(valid_years), max(valid_years)) if valid_years else None,
             "avg_recency_score": sum(m.get_recency_score() for m in self.metadata_cache.values()) / total if total > 0 else 0
         }
@@ -324,7 +360,6 @@ class MetadataManager:
         print("\n📊 元数据统计:")
         print(f"  - 总论文数: {stats['total_papers']}")
         print(f"  - 有日期信息: {stats['papers_with_dates']}/{stats['total_papers']}")
-        print(f"  - 有青年学者: {stats['papers_with_young_scholars']}/{stats['total_papers']}")
         
         if stats['year_range']:
             print(f"  - 年份范围: {stats['year_range'][0]} - {stats['year_range'][1]}")

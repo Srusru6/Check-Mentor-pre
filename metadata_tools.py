@@ -20,6 +20,10 @@ def validate_metadata_file(file_path: Path) -> tuple[bool, list[str]]:
     """
     验证元数据文件的格式
     
+    支持两种格式：
+    1. 新格式（items数组）：{"items": [{title, doi, authors, published: {year, month}}]}
+    2. 旧格式（文件名映射）：{"filename.md": {doi, authors, published: {year, month}}}
+    
     Returns:
         (是否有效, 错误列表)
     """
@@ -43,44 +47,86 @@ def validate_metadata_file(file_path: Path) -> tuple[bool, list[str]]:
         errors.append("根节点必须是字典")
         return False, errors
     
-    # 验证每个条目
-    for filename, metadata in data.items():
-        prefix = f"[{filename}]"
+    # 检测格式类型
+    if "items" in data:
+        # 新格式：items 数组
+        items = data.get("items", [])
+        if not isinstance(items, list):
+            errors.append("items 必须是数组")
+            return False, errors
         
-        # 检查必需字段
-        required_fields = ["doi", "authors", "publish_date", "young_scholar_index"]
-        for field in required_fields:
-            if field not in metadata:
-                errors.append(f"{prefix} 缺少必需字段: {field}")
-        
-        # 验证字段类型
-        if "doi" in metadata and not isinstance(metadata["doi"], str):
-            errors.append(f"{prefix} doi 必须是字符串")
-        
-        if "authors" in metadata:
-            if not isinstance(metadata["authors"], list):
-                errors.append(f"{prefix} authors 必须是列表")
-            elif not all(isinstance(a, str) for a in metadata["authors"]):
-                errors.append(f"{prefix} authors 列表中的所有元素必须是字符串")
-        
-        if "publish_date" in metadata:
-            if not isinstance(metadata["publish_date"], str):
-                errors.append(f"{prefix} publish_date 必须是字符串")
-            else:
-                # 验证日期格式
-                try:
-                    datetime.fromisoformat(metadata["publish_date"])
-                except ValueError:
-                    errors.append(f"{prefix} publish_date 格式无效，应为 YYYY-MM-DD")
-        
-        if "young_scholar_index" in metadata:
-            if not isinstance(metadata["young_scholar_index"], int):
-                errors.append(f"{prefix} young_scholar_index 必须是整数")
-            elif metadata["young_scholar_index"] < -1:
-                errors.append(f"{prefix} young_scholar_index 不能小于 -1")
-            elif "authors" in metadata:
-                if metadata["young_scholar_index"] >= len(metadata["authors"]):
-                    errors.append(f"{prefix} young_scholar_index 超出 authors 列表范围")
+        for i, item in enumerate(items):
+            prefix = f"[item {i}]"
+            
+            if not isinstance(item, dict):
+                errors.append(f"{prefix} 必须是字典")
+                continue
+            
+            # 检查必需字段
+            required_fields = ["title", "doi", "authors"]
+            for field in required_fields:
+                if field not in item:
+                    errors.append(f"{prefix} 缺少必需字段: {field}")
+            
+            # 验证字段类型
+            if "title" in item and not isinstance(item["title"], str):
+                errors.append(f"{prefix} title 必须是字符串")
+            
+            if "doi" in item and not isinstance(item["doi"], str):
+                errors.append(f"{prefix} doi 必须是字符串")
+            
+            if "authors" in item:
+                if not isinstance(item["authors"], list):
+                    errors.append(f"{prefix} authors 必须是列表")
+                elif not all(isinstance(a, str) for a in item["authors"]):
+                    errors.append(f"{prefix} authors 列表中的所有元素必须是字符串")
+            
+            # 验证 published 字段（可选）
+            if "published" in item:
+                if not isinstance(item["published"], dict):
+                    errors.append(f"{prefix} published 必须是字典")
+                else:
+                    if "year" in item["published"]:
+                        if not isinstance(item["published"]["year"], int):
+                            errors.append(f"{prefix} published.year 必须是整数")
+                    if "month" in item["published"]:
+                        month = item["published"]["month"]
+                        if not isinstance(month, int) or not (1 <= month <= 12):
+                            errors.append(f"{prefix} published.month 必须是1-12之间的整数")
+    
+    else:
+        # 旧格式：文件名映射（向后兼容）
+        for filename, metadata in data.items():
+            prefix = f"[{filename}]"
+            
+            # 检查必需字段
+            required_fields = ["doi", "authors"]
+            for field in required_fields:
+                if field not in metadata:
+                    errors.append(f"{prefix} 缺少必需字段: {field}")
+            
+            # 验证字段类型
+            if "doi" in metadata and not isinstance(metadata["doi"], str):
+                errors.append(f"{prefix} doi 必须是字符串")
+            
+            if "authors" in metadata:
+                if not isinstance(metadata["authors"], list):
+                    errors.append(f"{prefix} authors 必须是列表")
+                elif not all(isinstance(a, str) for a in metadata["authors"]):
+                    errors.append(f"{prefix} authors 列表中的所有元素必须是字符串")
+            
+            # 验证 published 字段（可选）
+            if "published" in metadata:
+                if not isinstance(metadata["published"], dict):
+                    errors.append(f"{prefix} published 必须是字典")
+                else:
+                    if "year" in metadata["published"]:
+                        if not isinstance(metadata["published"]["year"], int):
+                            errors.append(f"{prefix} published.year 必须是整数")
+                    if "month" in metadata["published"]:
+                        month = metadata["published"]["month"]
+                        if not isinstance(month, int) or not (1 <= month <= 12):
+                            errors.append(f"{prefix} published.month 必须是1-12之间的整数")
     
     return len(errors) == 0, errors
 
@@ -93,26 +139,38 @@ def generate_template(output_path: Path, paper_directory: Path = None):
         output_path: 输出文件路径
         paper_directory: 论文目录（如果提供，将为所有 .md 文件生成条目）
     """
-    template = {}
-    
     if paper_directory and paper_directory.exists():
-        # 为目录中的所有 .md 文件生成模板
+        # 为目录中的所有 .md 文件生成模板（新格式）
         md_files = sorted(paper_directory.glob("*.md"))
+        items = []
         for md_file in md_files:
-            template[md_file.name] = {
+            # 去掉 .md 扩展名作为 title
+            title = md_file.stem
+            items.append({
+                "title": title,
                 "doi": "",
                 "authors": [],
-                "publish_date": "",
-                "young_scholar_index": -1
-            }
+                "published": {
+                    "year": 2024,
+                    "month": 1
+                }
+            })
+        template = {"items": items}
         print(f"✓ 为 {len(md_files)} 篇论文生成了模板条目")
     else:
-        # 生成示例模板
-        template["示例论文.md"] = {
-            "doi": "10.xxxx/xxxxx",
-            "authors": ["作者1", "作者2", "作者3"],
-            "publish_date": "2024-01-15",
-            "young_scholar_index": 0
+        # 生成示例模板（新格式）
+        template = {
+            "items": [
+                {
+                    "title": "示例论文标题",
+                    "doi": "10.xxxx/xxxxx",
+                    "authors": ["作者1", "作者2", "作者3"],
+                    "published": {
+                        "year": 2024,
+                        "month": 1
+                    }
+                }
+            ]
         }
     
     with open(output_path, 'w', encoding='utf-8') as f:
@@ -136,11 +194,7 @@ def show_statistics(file_path: Path):
             print(f"\n  📄 {filename}")
             print(f"     DOI: {metadata.doi}")
             print(f"     作者: {', '.join(metadata.authors) if metadata.authors else '无'}")
-            print(f"     发布日期: {metadata.publish_date if metadata.publish_date else '未知'}")
-            if metadata.has_young_scholar():
-                print(f"     青年学者: {metadata.get_young_scholar_name()} (索引 {metadata.young_scholar_index})")
-            else:
-                print(f"     青年学者: 无")
+            print(f"     发布日期: {metadata.get_publish_date_str()}")
             print(f"     时效性得分: {metadata.get_recency_score():.3f}")
 
 
@@ -153,13 +207,12 @@ def test_metadata_features():
     metadata = PaperMetadata(
         doi="10.1038/test",
         authors=["Alice", "Bob", "Charlie"],
-        publish_date="2024-01-15",
-        young_scholar_index=1
+        publish_year=2024,
+        publish_month=1
     )
     print(f"  ✓ 创建成功")
     print(f"    - 发布年份: {metadata.get_publish_year()}")
-    print(f"    - 有青年学者: {metadata.has_young_scholar()}")
-    print(f"    - 青年学者姓名: {metadata.get_young_scholar_name()}")
+    print(f"    - 发布日期字符串: {metadata.get_publish_date_str()}")
     print(f"    - 时效性得分: {metadata.get_recency_score():.3f}")
     
     # 测试2: 时效性计算
@@ -167,18 +220,18 @@ def test_metadata_features():
     test_years = [2024, 2020, 2015, 2010, 2000]
     current_year = datetime.now().year
     for year in test_years:
-        m = PaperMetadata(publish_date=f"{year}-01-01")
+        m = PaperMetadata(publish_year=year)
         score = m.get_recency_score()
         age = current_year - year
         print(f"  {year} ({age}年前): {score:.3f}")
     
-    # 测试3: 字典转换
-    print("\n测试 3: 字典序列化和反序列化")
+    # 测试3: 字典转换（新格式）
+    print("\n测试 3: 字典序列化和反序列化（新格式）")
     original = PaperMetadata(
         doi="10.1234/test",
         authors=["Author1", "Author2"],
-        publish_date="2023-06-15",
-        young_scholar_index=0
+        publish_year=2023,
+        publish_month=6
     )
     dict_data = original.to_dict()
     restored = PaperMetadata.from_dict(dict_data)
@@ -192,6 +245,39 @@ def test_metadata_features():
     retrieved = manager.get_metadata("test1.md")
     print(f"  ✓ 添加和检索成功")
     print(f"  ✓ 检索到的 DOI: {retrieved.doi}")
+    
+    # 测试5: 从items数组加载
+    print("\n测试 5: 从items数组格式加载")
+    test_data = {
+        "items": [
+            {
+                "title": "Test Paper 1",
+                "doi": "10.1234/test1",
+                "authors": ["Author A", "Author B"],
+                "published": {"year": 2023, "month": 5}
+            },
+            {
+                "title": "Test Paper 2",
+                "doi": "10.1234/test2",
+                "authors": ["Author C"],
+                "published": {"year": 2024}
+            }
+        ]
+    }
+    # 创建临时文件
+    import tempfile
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as f:
+        json.dump(test_data, f, ensure_ascii=False, indent=2)
+        temp_file = f.name
+    
+    manager2 = MetadataManager()
+    success = manager2.load_metadata_file(Path(temp_file))
+    print(f"  ✓ 加载成功: {success}")
+    print(f"  ✓ 加载了 {len(manager2.metadata_cache)} 条记录")
+    
+    # 清理临时文件
+    import os
+    os.unlink(temp_file)
     
     print("\n✅ 所有测试通过!")
 

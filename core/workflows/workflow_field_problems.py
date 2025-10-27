@@ -142,7 +142,7 @@ class FieldProblemsWorkflow:
 - Map out the field's structure and connections
 - Identify open challenges and future trends
 
-**Scoring Philosophy**: Use the FULL 0.0-1.0 range. Think: "How much does this paper help me understand the field's priorities?"
+**Scoring Philosophy**: Use the FULL 0.00-1.00 range. Think: "How much does this paper help me understand the field's priorities?"
 - **0.9-1.0**: Exceptional field guide (e.g., comprehensive review that maps the entire landscape)
 - **0.7-0.8**: Strong informant (e.g., breakthrough work that defines a new direction, or excellent topical review)
 - **0.5-0.6**: Useful contributor (e.g., solid work on a recognized problem)
