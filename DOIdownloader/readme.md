@@ -96,6 +96,22 @@ python download.py --doi 10.1126/science.177.4047.393 --depth 0 --unpaywall-emai
 python download.py --doi 10.1038/nphys4074 --depth 2 --save-only-depth 2
 ```
 
+## 反向引用（根据 DOI 找“被引”论文）
+
+若需查询“一篇论文被哪些论文引用了”的 DOI，可使用同目录脚本：
+
+```powershell
+python cited_by_from_doi.py --doi 10.1038/nature12373
+# 或批量：
+python cited_by_from_doi.py --input d:\path\to\dois.txt --out d:\path\to\citing.csv
+# 建议带邮箱提升礼貌与稳定性：
+python cited_by_from_doi.py --doi 10.1038/nature12373 --email you@example.com
+```
+
+输出字段：`source_doi, citing_doi, citing_openalex_id, year`。
+
+实现基于 OpenAlex API（无需 Key）：先将 DOI 解析为 OpenAlex Work ID，再用 `filter=cites:W...` 遍历分页（跳过没有 DOI 的记录）。
+
 ## ref2 生成逻辑（关键点）
 
 - 层级与目录：depth=0 → `main`，depth=1 → `ref1`，depth=2 → `ref2`。
