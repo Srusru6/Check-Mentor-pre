@@ -191,6 +191,53 @@ Instructions:
                 "hot_topics": []
             }
 
+    def _cluster_papers_by_llm(self, papers: List[Dict[str, Any]]) -> Dict[str, List[str]]:
+        """
+        (New) Uses an LLM to perform semantic clustering on a list of papers.
+        """
+        print("    -> High-score paper count exceeds threshold. Performing LLM-based semantic clustering...")
+
+        paper_info = [
+            {"title": p.get("title", "N/A"), "identified_problem": p.get("identified_problem", "N/A")}
+            for p in papers
+        ]
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are a senior research analyst. You have been given a list of papers, each with its title and the core problem it addresses. Your task is to group these papers into 3-5 high-level research themes based on the **semantic similarity** of their core problems.
+
+Your task is **clustering, not summarization**.
+
+The output MUST be a valid JSON object where:
+- Each KEY is a concise, descriptive name for a research theme you identified (e.g., "On-Chip Quantum Light Sources").
+- Each VALUE is a list of paper titles that belong to that theme.
+
+Example Input:
+[
+  {"title": "Paper A", "identified_problem": "scalable quantum entanglement"},
+  {"title": "Paper B", "identified_problem": "generating multi-photon entangled states"},
+  {"title": "Paper C", "identified_problem": "topological protection on photonic chips"}
+]
+
+Example Output:
+{{
+  "Scalable Quantum Entanglement": ["Paper A", "Paper B"],
+  "Topological Photonics": ["Paper C"]
+}}"""),
+            ("user", "Here is the list of papers to cluster:\n\n{paper_info_json}")
+        ])
+
+        parser = JsonOutputParser()
+        chain = prompt | self.llm | parser
+
+        try:
+            paper_info_json = json.dumps(paper_info, indent=2, ensure_ascii=False)
+            cluster_result = chain.invoke({"paper_info_json": paper_info_json})
+            return cluster_result
+        except Exception as e:
+            print(f"    ⚠️ Error during LLM clustering: {e}")
+            # Fallback: if clustering fails, return a single group to avoid crashing
+            return {"All High-Score Papers": [p["title"] for p in papers]}
+
     def run(self, main_papers: List[Dict[str, Any]], ref1_papers: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         执行工作流，分析所有论文并识别领域热点问题。
@@ -277,10 +324,38 @@ Instructions:
         # 2. 基于高分论文，综合分析热点问题
         print("\n  [Step 2/2] Synthesizing hot topics from top-rated papers...")
         
-        rated_papers.sort(key=lambda x: x.get("weighted_score", 0), reverse=True)
-        
-        top_n = min(len(rated_papers), 10)
-        top_papers = rated_papers[:top_n]
+        high_score_threshold = 0.6
+        high_score_papers = [p for p in rated_papers if p.get("weighted_score", 0.0) >= high_score_threshold]
+        print(f"  -> Found {len(high_score_papers)} papers with score >= {high_score_threshold}.")
+
+        # 如果高质量论文过多，则进行聚类和代表性采样
+        if len(high_score_papers) > 10:
+            # 1. LLM语义聚类
+            clusters = self._cluster_papers_by_llm(high_score_papers)
+            
+            # 2. 代表性提取
+            representative_papers = []
+            paper_map = {p["title"]: p for p in high_score_papers}
+            
+            for theme, titles in clusters.items():
+                if not titles: continue
+                
+                # 找到该主题下分数最高的论文
+                theme_papers = [paper_map[title] for title in titles if title in paper_map]
+                if not theme_papers: continue
+                
+                best_paper_in_theme = max(theme_papers, key=lambda p: p.get("weighted_score", 0))
+                representative_papers.append(best_paper_in_theme)
+            
+            # 去重，因为一篇论文可能属于多个聚类
+            # 使用字典来去重，保持顺序
+            final_papers_for_synthesis = list({p["id"]: p for p in representative_papers}.values())
+            print(f"  -> Clustered into {len(clusters)} themes. Selected {len(final_papers_for_synthesis)} representative papers for final synthesis.")
+            top_papers = final_papers_for_synthesis
+        else:
+            # 如果论文数量不多，直接使用所有高分论文
+            print("  -> Number of high-score papers is manageable. Using all for synthesis.")
+            top_papers = high_score_papers
 
         if not top_papers:
             print("    ⚠️ No high-score papers found. Cannot synthesize hot topics.")
