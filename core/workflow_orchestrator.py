@@ -18,6 +18,7 @@ from langchain_community.chat_models import ChatTongyi
 
 from . import config
 from .final_analysis import FinalAnalyzer
+from .metadata_manager import MetadataManager
 from .workflows.workflow_contribution import ContributionWorkflow
 from .workflows.workflow_field_problems import FieldProblemsWorkflow
 from .workflows.workflow_undergrad_projects import UndergradProjectsWorkflow
@@ -67,6 +68,9 @@ class WorkflowOrchestrator:
         # 3. 初始化最终分析器，并注入LLM用于翻译
         self.final_analyzer = FinalAnalyzer(self.professor_name, main_llm)
         
+        # 4. 初始化元数据管理器
+        self.metadata_manager = MetadataManager()
+        
         config.validate_config()
         print("✅ Orchestrator initialized successfully.")
 
@@ -98,6 +102,26 @@ class WorkflowOrchestrator:
                 "md_filename": str(md_file),
             })
         return papers
+    
+    def _load_metadata_for_directory(self, dir_path: Path) -> bool:
+        """
+        为指定目录加载元数据文件（如果存在）
+        
+        元数据文件应命名为 'metadata.json' 并位于论文目录中
+        
+        Args:
+            dir_path: 论文目录路径
+            
+        Returns:
+            是否成功加载元数据
+        """
+        metadata_file = dir_path / "metadata.json"
+        if metadata_file.exists():
+            print(f"    📋 发现元数据文件: {metadata_file.name}")
+            return self.metadata_manager.load_metadata_file(metadata_file)
+        else:
+            print(f"    ℹ️  未找到元数据文件 (metadata.json)")
+            return False
 
     def run(self):
         """
@@ -109,17 +133,51 @@ class WorkflowOrchestrator:
         limit = config.TEST_MODE_PAPER_LIMIT if self.test_mode else 0
         base_data_path = Path(f"data/{self.professor_name}")
         
+        # 尝试加载各个目录的元数据
+        print("\n🔍 检查并加载元数据文件...")
+        main_path = base_data_path / "main"
+        ref1_path = base_data_path / "ref1"
+        ref2_path = base_data_path / "ref2"
+        
+        print(f"  [Main] {main_path}")
+        self._load_metadata_for_directory(main_path)
+        
+        print(f"  [Ref1] {ref1_path}")
+        self._load_metadata_for_directory(ref1_path)
+        
+        print(f"  [Ref2] {ref2_path}")
+        self._load_metadata_for_directory(ref2_path)
+        
+        # 打印元数据统计
+        if len(self.metadata_manager.metadata_cache) > 0:
+            self.metadata_manager.print_statistics()
+        else:
+            print("    ℹ️  未加载任何元数据，将使用默认配置")
+        
         # 加载教授代表作 (main) - 始终完整加载
-        main_papers = self._load_papers_from_dir(str(base_data_path / "main"), self.professor_name)
+        main_papers = self._load_papers_from_dir(str(main_path), self.professor_name)
 
         if self.test_mode:
             print(f"  -> 运行在测试模式: 教授代表作将完整加载 ({len(main_papers)}篇) 以保证分析准确性。")
             print(f"  -> 其余数据源 (ref1, ref2) 最多处理 {limit} 篇论文。")
-            ref1_papers = self._load_papers_from_dir(str(base_data_path / "ref1"), "Various Authors", limit)
-            ref2_papers = self._load_papers_from_dir(str(base_data_path / "ref2"), "Various Authors", limit)
+            ref1_papers = self._load_papers_from_dir(str(ref1_path), "Various Authors", limit)
+            ref2_papers = self._load_papers_from_dir(str(ref2_path), "Various Authors", limit)
         else:
-            ref1_papers = self._load_papers_from_dir(str(base_data_path / "ref1"), "Various Authors")
-            ref2_papers = self._load_papers_from_dir(str(base_data_path / "ref2"), "Various Authors")
+            ref1_papers = self._load_papers_from_dir(str(ref1_path), "Various Authors")
+            ref2_papers = self._load_papers_from_dir(str(ref2_path), "Various Authors")
+        
+        # 为论文添加元数据信息
+        print("\n📝 为论文添加元数据...")
+        main_papers = self.metadata_manager.get_papers_with_metadata(main_papers)
+        ref1_papers = self.metadata_manager.get_papers_with_metadata(ref1_papers)
+        ref2_papers = self.metadata_manager.get_papers_with_metadata(ref2_papers)
+        
+        # 按发布时间对论文进行排序（更新的论文在前）
+        if len(self.metadata_manager.metadata_cache) > 0:
+            print("  ✓ 按发布时间对论文进行排序（新→旧）...")
+            main_papers = self.metadata_manager.sort_papers_by_recency(main_papers, descending=True)
+            ref1_papers = self.metadata_manager.sort_papers_by_recency(ref1_papers, descending=True)
+            ref2_papers = self.metadata_manager.sort_papers_by_recency(ref2_papers, descending=True)
 
         print("  -> 数据源分离完成:")
         print(f"    - 教授代表作 (main): {len(main_papers)} 篇")

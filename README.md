@@ -77,18 +77,26 @@ Downloads_pdf
 │   │   └── workflow_undergrad_projects.py
 │   ├── config.py           # 从 .env 加载配置
 │   ├── data_manager.py     # 管理 JSON 格式的缓存数据
+│   ├── metadata_manager.py # 论文元数据管理 (NEW!)
 │   ├── final_analysis.py   # 生成最终综合报告
 │   └── workflow_orchestrator.py # 工作流编排器
 ├── data/                   # 输入数据
+│   ├── metadata_example.json # 元数据格式示例 (NEW!)
 │   └── 王剑威/             # 按教授姓名组织
 │       ├── main/           # 教授代表作
+│       │   └── metadata.json # 论文元数据 (可选)
 │       ├── ref1/           # 关键参考文献
+│       │   └── metadata.json # 论文元数据 (可选)
 │       └── ref2/           # 潜在项目文献
+│           └── metadata.json # 论文元数据 (可选)
 ├── output/                 # 输出目录
 │   └── ..._final_report.md # 最终生成的 Markdown 报告
 ├── .env.example            # 环境变量示例文件
 ├── .venv/                  # Python 虚拟环境
 ├── main.py                 # 项目主入口点
+├── metadata_tools.py       # 元数据管理工具 (NEW!)
+├── METADATA_README.md      # 元数据功能详细文档 (NEW!)
+├── METADATA_QUICKSTART.md  # 元数据功能快速入门 (NEW!)
 ├── README.md               # 项目说明文件
 └── requirements.txt        # Python 依赖列表
 ```
@@ -138,6 +146,7 @@ Downloads_pdf
       - `ref1/`: 存放用于分析**领域热点**的关键参考文献。
       - `ref2/`: 存放用于启发**本科生项目**的复杂度适中的论文。
     - 将整理好的论文（`.md` 格式）放入对应的文件夹中。
+    - **[可选]** 添加论文元数据以提升分析质量（详见下方"元数据功能"部分）。
 
 2.  **执行程序**
     - 在项目根目录下，通过命令行运行 `main.py`，并使用 `--target` 参数指定目标教授的姓名。
@@ -186,3 +195,53 @@ Downloads_pdf
 ## 输出说明
 
 - 程序执行完毕后，一份详细的 Markdown 格式分析报告将保存在 `output/` 目录下，文件名类似于 `王剑威_final_report.md`。
+
+## 元数据功能 (NEW! ✨)
+
+本项目现已支持论文元数据，可以显著提升分析质量！
+
+### 什么是元数据？
+
+每篇论文的元数据包含：
+- **DOI**: 论文的唯一标识符
+- **作者列表**: 完整的作者信息
+- **发布时间**: 论文的发布日期
+- **青年学者索引**: 标识第一位青年学者在作者列表中的位置
+
+### 元数据的作用
+
+1. **智能排序**: 更新的论文会被优先分析，确保关注最新研究动态
+2. **时效性评分**: 自动计算论文的时效性得分（0-1），近期论文得分更高
+3. **青年学者识别**: 识别有青年学者参与的论文
+4. **完整作者信息**: 为未来的合作网络分析打下基础
+
+### 快速开始
+
+1. **生成元数据模板**:
+   ```bash
+   python metadata_tools.py generate data/王剑威/main/metadata.json --paper-dir data/王剑威/main
+   ```
+
+2. **填写论文信息**: 编辑生成的 `metadata.json` 文件
+
+3. **验证格式**:
+   ```bash
+   python metadata_tools.py validate data/王剑威/main/metadata.json
+   ```
+
+4. **正常运行程序**: 系统会自动检测并使用元数据
+
+### 详细文档
+
+- 📖 [元数据详细文档](log/metadata_feature/METADATA_README.md) - 完整的技术说明和API文档
+- 🚀 [快速入门指南](log/metadata_feature/METADATA_QUICKSTART.md) - 分步骤的使用教程
+- 📝 [元数据示例](data/metadata_example.json) - JSON格式示例
+- 📊 [权重应用总结](log/metadata_feature/METADATA_WEIGHTS_SUMMARY.md) - 元数据权重在工作流中的应用
+
+### 兼容性
+
+✅ **完全向后兼容**: 没有元数据文件时，程序仍可正常运行
+✅ **渐进式采用**: 可以只为部分论文添加元数据
+✅ **零学习成本**: 使用工具脚本自动生成模板
+
+---

@@ -45,13 +45,20 @@ class UndergradProjectsWorkflow:
             print(f"    ⚠️ Error loading file {file_path}: {e}")
             return ""
 
-    def _invoke_llm_with_fallback(self, chain, paper_content, contribution_summary):
+    def _invoke_llm_with_fallback(self, chain, paper_content, contribution_summary, metadata_context=""):
         """
         调用LLM，如果主LLM失败，则尝试备用LLM。
+        
+        Args:
+            chain: LangChain链
+            paper_content: 论文内容
+            contribution_summary: 教授贡献总结
+            metadata_context: 元数据上下文信息
         """
         input_data = {
             "paper_content": paper_content[:12000],
-            "contribution_summary": contribution_summary
+            "contribution_summary": contribution_summary,
+            "metadata_context": metadata_context
         }
         try:
             # print("      -> Attempting main LLM...")
@@ -81,10 +88,43 @@ class UndergradProjectsWorkflow:
         
         return {"error": "Both main and fallback LLMs failed."}
 
-    def _evaluate_single_paper(self, paper_content: str, contribution_summary: str) -> Dict[str, Any]:
+    def _evaluate_single_paper(self, paper_content: str, contribution_summary: str, metadata: Dict[str, Any] = None) -> Dict[str, Any]:
         """
         使用 LLM 评估单篇论文，基于四维模型进行打分。
+        
+        Args:
+            paper_content: 论文内容
+            contribution_summary: 教授贡献总结
+            metadata: 论文元数据（可选）
         """
+        # 构建元数据上下文
+        metadata_context = ""
+        recency_note = ""
+        
+        if metadata:
+            metadata_context = "\n\n**Paper Metadata:**"
+            if metadata.get("publish_date"):
+                metadata_context += f"\n- Publication Date: {metadata['publish_date']}"
+                
+                # 根据发布时间添加说明
+                try:
+                    from datetime import datetime
+                    pub_year = int(metadata['publish_date'][:4])
+                    current_year = datetime.now().year
+                    age = current_year - pub_year
+                    
+                    if age <= 2:
+                        recency_note = "\n\n**RECENCY NOTE**: This is a very recent paper. Recent papers may use cutting-edge techniques that are more relevant to current research trends, but they might also require more specialized knowledge. Consider both the potential for learning modern techniques and the accessibility for undergraduates."
+                    elif age >= 8:
+                        recency_note = "\n\n**RECENCY NOTE**: This is an older paper. While foundational concepts remain valuable, consider whether the techniques or approaches are still current in the field. Older papers may be more accessible (using well-established methods) but might not reflect modern research directions."
+                except:
+                    pass
+            
+            if metadata.get("authors"):
+                metadata_context += f"\n- Authors: {', '.join(metadata['authors'][:3])}"
+                if len(metadata['authors']) > 3:
+                    metadata_context += f" (and {len(metadata['authors']) - 3} more)"
+        
         prompt = ChatPromptTemplate.from_messages([
             ("system", """You are an experienced professor evaluating papers for potential undergraduate research projects. Your goal is to find projects that are not only feasible but also relevant to your own research interests and valuable for a student's growth.
 
@@ -126,13 +166,18 @@ Your final output MUST be a JSON object with the following structure:
   "justification": "<A brief justification for your scores, referencing the four criteria.>",
   "project_idea": "<A concrete, one-sentence project idea for an undergraduate. If not suitable, state 'Not suitable'.>"
 }}"""),
-            ("user", "Please evaluate the following paper content for undergraduate project suitability and provide the structured JSON output:\n\n**Paper Content:**\n---\n{paper_content}\n---")
+            ("user", "Please evaluate the following paper content for undergraduate project suitability and provide the structured JSON output:{metadata_context}{recency_note}\n\n**Paper Content:**\n---\n{paper_content}\n---")
         ])
         
         parser = JsonOutputParser()
         chain = prompt | self.llm | parser
 
-        evaluation_result = self._invoke_llm_with_fallback(chain, paper_content, contribution_summary)
+        evaluation_result = self._invoke_llm_with_fallback(
+            chain, 
+            paper_content, 
+            contribution_summary,
+            metadata_context=metadata_context + recency_note
+        )
         
         return evaluation_result
 
@@ -194,12 +239,18 @@ Synthesized Summary of Project Suggestions:""")
 
             if cached_result:
                 evaluation = cached_result
+                # 确保缓存结果也包含时效性得分
+                if 'recency_score' not in evaluation and 'recency_score' in paper:
+                    evaluation['recency_score'] = paper['recency_score']
             else:
                 content = self._load_paper_content(paper['md_filename'])
                 if not content:
                     continue
                 
-                evaluation_result = self._evaluate_single_paper(content, contribution_summary)
+                # 提取元数据
+                paper_metadata = paper.get('metadata')
+                
+                evaluation_result = self._evaluate_single_paper(content, contribution_summary, paper_metadata)
 
                 if evaluation_result.get("error"):
                     tqdm.write(f"    ⚠️ Skipped paper '{paper['title']}' due to LLM failure.")
@@ -212,13 +263,29 @@ Synthesized Summary of Project Suggestions:""")
                 e_score = evaluation_result.get("educational_score", 0.0)
 
                 weighted_score = (r_score * 0.4) + (a_score * 0.25) + (m_score * 0.2) + (e_score * 0.15)
+                
+                # 应用时效性权重：对于本科生项目，适度新的论文更合适
+                # 太新可能太难，太旧可能过时
+                recency_score = paper.get('recency_score', 0.5)
+                if recency_score != 0.5:
+                    # 对于本科生项目：
+                    # - 非常新的论文(>0.9)可能过于前沿，不加权或轻微降权
+                    # - 适度新的论文(0.6-0.9)最适合，给予提升
+                    # - 较旧的论文(<0.4)可能过时，轻微降权
+                    if 0.6 <= recency_score <= 0.9:
+                        weighted_score = weighted_score * 1.08  # 8%提升
+                    elif recency_score > 0.9:
+                        weighted_score = weighted_score * 0.98  # 2%降权（太新可能太难）
+                    elif recency_score < 0.4:
+                        weighted_score = weighted_score * 0.95  # 5%降权
 
                 # 构建完整的评估对象并缓存
                 evaluation = {
                     **evaluation_result,
                     'paper_id': paper_id,
                     'title': paper['title'],
-                    'weighted_score': round(weighted_score, 4)
+                    'weighted_score': round(weighted_score, 4),
+                    'recency_score': recency_score
                 }
                 self.cache.set(paper_id, evaluation)
                 time.sleep(1) # Delay after successful API call

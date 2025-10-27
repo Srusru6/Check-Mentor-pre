@@ -49,16 +49,30 @@ class FieldProblemsWorkflow:
             print(f"    ⚠️ Error loading file {file_path}: {e}")
             return ""
 
-    def _invoke_llm_with_fallback(self, chain, paper_content):
+    def _invoke_llm_with_fallback(self, chain, paper_content, metadata_context="", temporal_instruction=""):
         """
         调用LLM，如果主LLM失败，则尝试备用LLM。
+        
+        Args:
+            chain: LangChain链
+            paper_content: 论文内容
+            metadata_context: 元数据上下文信息
+            temporal_instruction: 时间相关的指令
         """
         try:
-            result = chain.invoke({"paper_content": paper_content[:12000]})
+            result = chain.invoke({
+                "paper_content": paper_content[:12000],
+                "metadata_context": metadata_context,
+                "temporal_instruction": temporal_instruction
+            })
             return result
         except (OutputParserException, json.JSONDecodeError):
             try:
-                result = chain.invoke({"paper_content": paper_content[:12000]})
+                result = chain.invoke({
+                    "paper_content": paper_content[:12000],
+                    "metadata_context": metadata_context,
+                    "temporal_instruction": temporal_instruction
+                })
                 return result
             except Exception:
                 pass
@@ -68,17 +82,55 @@ class FieldProblemsWorkflow:
         if self.fallback_llm:
             try:
                 fallback_chain = chain.with_llm(self.fallback_llm)
-                result = fallback_chain.invoke({"paper_content": paper_content[:12000]})
+                result = fallback_chain.invoke({
+                    "paper_content": paper_content[:12000],
+                    "metadata_context": metadata_context,
+                    "temporal_instruction": temporal_instruction
+                })
                 return result
             except Exception:
                 pass
         
         return {"error": "Both main and fallback LLMs failed."}
 
-    def _rate_single_paper(self, paper_content: str) -> Dict[str, Any]:
+    def _rate_single_paper(self, paper_content: str, metadata: Dict[str, Any] = None) -> Dict[str, Any]:
         """
         使用 LLM 评估单篇论文，基于四维模型进行打分。
+        
+        Args:
+            paper_content: 论文内容
+            metadata: 论文元数据（可选），包含发布时间、作者等信息
         """
+        # 构建元数据上下文
+        metadata_context = ""
+        temporal_instruction = ""
+        
+        if metadata:
+            metadata_context = "\n\n**Paper Metadata:**"
+            if metadata.get("publish_date"):
+                metadata_context += f"\n- Publication Date: {metadata['publish_date']}"
+                
+                # 根据发布时间添加特殊说明
+                try:
+                    from datetime import datetime
+                    pub_year = int(metadata['publish_date'][:4])
+                    current_year = datetime.now().year
+                    age = current_year - pub_year
+                    
+                    if age <= 2:
+                        temporal_instruction = "\n\n**TEMPORAL CONTEXT**: This is a very recent paper (published within the last 2 years). Recent papers are especially valuable for understanding the field's CURRENT priorities. When evaluating 'Significance' and 'Potential', consider that this represents cutting-edge work that may define emerging directions."
+                    elif age <= 5:
+                        temporal_instruction = "\n\n**TEMPORAL CONTEXT**: This is a relatively recent paper. It likely reflects current trends in the field."
+                    elif age >= 10:
+                        temporal_instruction = "\n\n**TEMPORAL CONTEXT**: This is an older paper. While it may be foundational, be careful when using it to assess the field's CURRENT priorities. It's more valuable for historical context than for identifying today's hot topics."
+                except:
+                    pass
+            
+            if metadata.get("authors"):
+                metadata_context += f"\n- Authors: {', '.join(metadata['authors'][:5])}"
+                if len(metadata['authors']) > 5:
+                    metadata_context += f" (and {len(metadata['authors']) - 5} more)"
+        
         prompt = ChatPromptTemplate.from_messages([
             ("system", """You are a research analyst tasked with identifying papers that best reveal **what problems a research field cares about**. Your goal is NOT to judge academic quality, but to assess how well each paper helps us understand the field's current priorities, challenges, and directions.
 
@@ -141,13 +193,18 @@ class FieldProblemsWorkflow:
 }}
 
 **REMEMBER**: You're identifying the best "field guides," not the best research. A comprehensive review is often more valuable than a narrow technical breakthrough for our purpose."""),
-            ("user", "Please analyze the following paper and rate how well it reveals the field's priorities and problems:\n\n---\n{paper_content}\n---")
+            ("user", "Please analyze the following paper and rate how well it reveals the field's priorities and problems:{metadata_context}{temporal_instruction}\n\n---\n{paper_content}\n---")
         ])
         
         parser = JsonOutputParser()
         chain = prompt | self.llm | parser
 
-        analysis_result = self._invoke_llm_with_fallback(chain, paper_content)
+        analysis_result = self._invoke_llm_with_fallback(
+            chain, 
+            paper_content,
+            metadata_context=metadata_context,
+            temporal_instruction=temporal_instruction
+        )
         
         if "error" in analysis_result:
             return analysis_result
@@ -303,7 +360,10 @@ Example Output:
                     pbar.set_postfix_str("Skipped (no content)")
                     continue
 
-                analysis_result = self._rate_single_paper(paper_content)
+                # 提取论文元数据
+                paper_metadata = paper.get('metadata')
+                
+                analysis_result = self._rate_single_paper(paper_content, paper_metadata)
                 
                 if "error" in analysis_result:
                     pbar.update(1)
@@ -315,8 +375,23 @@ Example Output:
                 c_score = analysis_result.get('clarity_score', 0)
                 p_score = analysis_result.get('potential_score', 0)
                 
+                # 计算基础加权得分
                 weighted_score = (s_score * 0.25) + (n_score * 0.1) + (c_score * 0.35) + (p_score * 0.3)
+                
+                # 应用时效性加权：更新的论文获得额外的权重提升
+                recency_score = paper.get('recency_score', 0.5)
+                if recency_score != 0.5:  # 只有有元数据的论文才应用此加权
+                    # 时效性权重: 0.9-1.0的recency_score给予10%提升, 0.7-0.9给予5%提升
+                    if recency_score >= 0.9:
+                        weighted_score = weighted_score * 1.10
+                    elif recency_score >= 0.7:
+                        weighted_score = weighted_score * 1.05
+                    # 非常旧的论文(recency_score < 0.3)稍微降权
+                    elif recency_score < 0.3:
+                        weighted_score = weighted_score * 0.95
+                
                 analysis_result["weighted_score"] = round(weighted_score, 2)
+                analysis_result["recency_score"] = recency_score  # 记录时效性得分
 
                 full_result = {**analysis_result, "paper_id": paper_id, "title": paper["title"]}
                 
