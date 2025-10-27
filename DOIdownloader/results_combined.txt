@@ -1,0 +1,28 @@
+--- 曹庆宏 (北京大学) ---
+OpenAlex Profile: https://openalex.org/authors?page=1&filter=default.search:Qinghong+Cao&zoom=a5005955121
+Combined DOIs (10 found):
+1. 10.1007/jhep08(2011)018
+2. 10.1016/j.physletb.2009.02.015
+3. 10.1103/physrevd.71.054022
+4. 10.1103/physrevd.72.094027
+5. 10.1103/physrevd.76.095011
+6. 10.1103/physrevd.81.114004
+7. 10.23731/cyrm-2017-003.255
+8. 10.48550/arxiv.1512.05542
+9. 10.48550/arxiv.1606.09408
+10. 10.48550/arxiv.1902.04070
+
+--- 王剑威 (北京大学) ---
+OpenAlex Profile: https://openalex.org/authors?page=1&filter=default.search:Jianwei+Wang&zoom=a5100424796
+Combined DOIs (10 found):
+1. 10.1002/adma.201908185
+2. 10.1038/nphys4074
+3. 10.1038/s41566-018-0236-y
+4. 10.1038/s41566-019-0532-1
+5. 10.1038/s41567-019-0567-8
+6. 10.1038/s42254-021-00398-z
+7. 10.1109/mvt.2019.2921398
+8. 10.1126/sciadv.aap9646
+9. 10.1126/science.1226528
+10. 10.1126/science.aar7053
+
