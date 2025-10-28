@@ -23,6 +23,36 @@ from .workflows.workflow_contribution import ContributionWorkflow
 from .workflows.workflow_field_problems import FieldProblemsWorkflow
 from .workflows.workflow_undergrad_projects import UndergradProjectsWorkflow
 
+def prepare_workflow_inputs(test_mode: bool, limit: int,
+                            main_papers: List[Dict[str, Any]],
+                            ref1_papers: List[Dict[str, Any]],
+                            cited_papers: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+    """根据新规则与 test_mode，准备三条工作流的输入。
+
+    假设 main/ref1/cited 已按元数据时序排序（新→旧）。
+    """
+    if test_mode:
+        return {
+            # Workflow 1: main（不截断）
+            "wf1_main": main_papers,
+            # Workflow 2: main 前N + cited 前N（无 ref1）
+            "wf2_main": main_papers[:limit],
+            "wf2_ref1": [],
+            "wf2_cited": cited_papers[:limit],
+            # Workflow 3: 仅 cited 前N
+            "wf3_main": [],
+            "wf3_cited": cited_papers[:limit],
+        }
+    else:
+        return {
+            "wf1_main": main_papers,
+            "wf2_main": main_papers,
+            "wf2_ref1": ref1_papers,
+            "wf2_cited": cited_papers,
+            "wf3_main": main_papers,
+            "wf3_cited": cited_papers,
+        }
+
 class WorkflowOrchestrator:
     """
     负责调度和执行所有分析工作流的中心控制器。
@@ -138,7 +168,6 @@ class WorkflowOrchestrator:
         # 步骤 1: 准备和分离数据源
         self._print_section_header("任务一：准备和分离论文数据源", level=2)
         
-        limit = config.TEST_MODE_PAPER_LIMIT if self.test_mode else 0
         base_data_path = Path(f"data/{self.professor_name}")
         
         # 尝试加载各个目录的元数据
@@ -167,17 +196,10 @@ class WorkflowOrchestrator:
         else:
             print("    ℹ️  未加载任何元数据，将使用默认配置")
         
-        # 加载教授代表作 (main) - 始终完整加载
+        # 加载论文 - 加载阶段不做截断，统一由后续“已按时序排序”的阶段按规则截断
         main_papers = self._load_papers_from_dir(str(main_path), self.professor_name)
-
-        if self.test_mode:
-            print(f"  -> 运行在测试模式: 教授代表作将完整加载 ({len(main_papers)}篇) 以保证分析准确性。")
-            print(f"  -> 其余数据源 (ref1, cited) 最多处理 {limit} 篇论文。")
-            ref1_papers = self._load_papers_from_dir(str(ref1_path), "Various Authors", limit)
-            cited_papers = self._load_papers_from_dir(str(cited_path), "Various Authors", limit)
-        else:
-            ref1_papers = self._load_papers_from_dir(str(ref1_path), "Various Authors")
-            cited_papers = self._load_papers_from_dir(str(cited_path), "Various Authors")
+        ref1_papers = self._load_papers_from_dir(str(ref1_path), "Various Authors")
+        cited_papers = self._load_papers_from_dir(str(cited_path), "Various Authors")
         
         # 为论文添加元数据信息
         print("\n📝 为论文添加元数据...")
@@ -185,7 +207,7 @@ class WorkflowOrchestrator:
         ref1_papers = self.metadata_manager.get_papers_with_metadata(ref1_papers)
         cited_papers = self.metadata_manager.get_papers_with_metadata(cited_papers)
         
-        # 按发布时间对论文进行排序（更新的论文在前）
+        # 按发布时间对论文进行排序（更新的论文在前），为后续“先时序、再取前N”做准备
         if len(self.metadata_manager.metadata_cache) > 0:
             print("  ✓ 按发布时间对论文进行排序（新→旧）...")
             main_papers = self.metadata_manager.sort_papers_by_recency(main_papers, descending=True)
@@ -196,6 +218,18 @@ class WorkflowOrchestrator:
         print(f"    - 教授代表作 (main): {len(main_papers)} 篇")
         print(f"    - 引用文献 (ref1): {len(ref1_papers)} 篇")
         print(f"    - 潜在项目文献 (cited): {len(cited_papers)} 篇")
+
+        # 基于新规则，准备各工作流的输入（在已排序的列表上再做截断）
+        limit = config.TEST_MODE_PAPER_LIMIT
+        prepared = prepare_workflow_inputs(self.test_mode, limit, main_papers, ref1_papers, cited_papers)
+        if self.test_mode:
+            print(f"  -> 测试模式启用：第二工作流使用 main/cited 各前{limit}篇；第三工作流使用 cited 前{limit}篇。")
+        wf1_main = prepared["wf1_main"]
+        wf2_main = prepared["wf2_main"]
+        wf2_ref1 = prepared["wf2_ref1"]
+        wf2_cited = prepared["wf2_cited"]
+        wf3_main = prepared["wf3_main"]
+        wf3_cited = prepared["wf3_cited"]
 
         # 创建日志目录
         log_dir = "log"
@@ -217,7 +251,7 @@ class WorkflowOrchestrator:
 
         # --- 工作流1: 分析教授的核心贡献 ---
         print("\n➡️ [Workflow 1/3] 分析教授的核心贡献...")
-        contribution_results = self.contribution_workflow.run(self.professor_name, main_papers)
+        contribution_results = self.contribution_workflow.run(self.professor_name, wf1_main)
         log_workflow_output("contribution", contribution_results)
         all_results['contribution_analysis'] = contribution_results
 
@@ -225,8 +259,9 @@ class WorkflowOrchestrator:
         print("\n➡️ [Workflow 2/3] 分析领域的热点问题...")
         field_problems_results = self.field_problems_workflow.run(
             professor_name=self.professor_name,
-            main_papers=main_papers,
-            ref1_papers=ref1_papers
+            main_papers=wf2_main,
+            ref1_papers=wf2_ref1,
+            cited_papers=wf2_cited,
         )
         log_workflow_output("field_problems", field_problems_results)
         all_results['field_problems_analysis'] = field_problems_results
@@ -236,9 +271,10 @@ class WorkflowOrchestrator:
         # 将工作流1的总结作为输入，传递给工作流3
         contribution_summary = contribution_results.get("contribution_summary", "")
         undergrad_projects_results = self.undergrad_projects_workflow.run(
-            self.professor_name, 
-            cited_papers,
-            contribution_summary
+            self.professor_name,
+            wf3_main,
+            wf3_cited,
+            contribution_summary,
         )
         log_workflow_output("undergrad_projects", undergrad_projects_results)
         all_results['undergrad_projects_analysis'] = undergrad_projects_results

@@ -325,13 +325,14 @@ Synthesized Summary of Project Suggestions:""")
         synthesis_result = chain.invoke({"papers_json": papers_json_str})
         return synthesis_result.content
 
-    def run(self, professor_name: str, cited_papers: List[Dict[str, Any]], contribution_summary: str) -> Dict[str, Any]:
+    def run(self, professor_name: str, main_papers: List[Dict[str, Any]], cited_papers: List[Dict[str, Any]], contribution_summary: str) -> Dict[str, Any]:
         """
         执行分析本科生项目的完整流程。
         """
         self.cache = CacheManager(professor_name, "undergrad_projects_analysis")
-        all_papers = cited_papers
-        print(f"  -> Running UndergradProjectsWorkflow on {len(all_papers)} papers (cited only).")
+        # 新规则：该工作流可接收 main + cited（由编排器按模式选择具体份额）
+        all_papers = (main_papers or []) + (cited_papers or [])
+        print(f"  -> Running UndergradProjectsWorkflow on {len(all_papers)} papers (main + cited).")
 
         if not all_papers:
             print("  -> No papers provided. Skipping workflow.")

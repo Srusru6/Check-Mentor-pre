@@ -314,7 +314,7 @@ Example Output:
             # Fallback: if clustering fails, return a single group to avoid crashing
             return {"All High-Score Papers": [p["title"] for p in papers]}
 
-    def run(self, professor_name: str, main_papers: List[Dict[str, Any]], ref1_papers: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def run(self, professor_name: str, main_papers: List[Dict[str, Any]], ref1_papers: List[Dict[str, Any]] = None, cited_papers: List[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         执行工作流，分析所有论文并识别领域热点问题。
         """
@@ -322,8 +322,14 @@ Example Output:
         
         self.cache = CacheManager(professor_name, "field_problems_analysis")
         print(f"  -> Cache file set for professor '{professor_name}' in workflow 'field_problems_analysis'.")
+        # 兼容空参
+        if ref1_papers is None:
+            ref1_papers = []
+        if cited_papers is None:
+            cited_papers = []
 
-        all_papers = main_papers + ref1_papers
+        # 新规则：该工作流可接收 main + ref1 + cited（由编排器按模式选择具体份额）
+        all_papers = (main_papers or []) + ref1_papers + cited_papers
         
         if not all_papers:
             print("  -> No papers provided. Skipping workflow.")
