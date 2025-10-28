@@ -63,7 +63,8 @@ class WorkflowOrchestrator:
         # 2. 将LLM实例注入到各个工作流中
         self.contribution_workflow = ContributionWorkflow(main_llm, fallback_llm)
         self.field_problems_workflow = FieldProblemsWorkflow(main_llm, fallback_llm)
-        self.undergrad_projects_workflow = UndergradProjectsWorkflow(main_llm, fallback_llm)
+        # 传递测试模式标志，以便在测试模式下进行更稳健的回退处理
+        self.undergrad_projects_workflow = UndergradProjectsWorkflow(main_llm, fallback_llm, test_mode=self.test_mode)
         
         # 3. 初始化最终分析器，并注入LLM用于翻译
         self.final_analyzer = FinalAnalyzer(self.professor_name, main_llm)
