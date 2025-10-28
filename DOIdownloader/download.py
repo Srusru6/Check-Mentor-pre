@@ -88,6 +88,9 @@ def http_get(url: str, *, timeout: float | None = None, headers=None, **kwargs):
 # Output roots (configurable via CLI)
 OUTPUT_ROOT_PDF = os.path.join(os.getcwd(), "Downloads_pdf")
 SAVE_ONLY_DEPTH: int | None = None  # if set, only save PDFs for this depth (0=main,1=ref1,2=ref2,...)
+CHECKPOINT_DIR: str | None = None   # where to persist task checkpoints
+ENABLE_CHECKPOINT: bool = True      # whether to persist/restore task checkpoints
+RESUME_FROM_CHECKPOINT: bool = False
 
 # Persistent download history (centralized under OUTPUT_ROOT_PDF)
 _history_lock = threading.Lock()
@@ -101,7 +104,7 @@ def _ensure_history_loaded():
     global _history_cache
     if _history_cache is None:
         os.makedirs(OUTPUT_ROOT_PDF, exist_ok=True)
-        hp = _history_path()
+        hp = _history_path()\
         if os.path.exists(hp):
             try:
                 with open(hp, 'r', encoding='utf-8') as f:
@@ -166,6 +169,27 @@ def configure_outputs(pdf_root: str | None = None):
         if OUTPUT_ROOT_PDF != new_root:
             OUTPUT_ROOT_PDF = new_root
             _history_cache = None  # force reload from new location
+    # default checkpoint dir under OUTPUT_ROOT_PDF
+    global CHECKPOINT_DIR
+    CHECKPOINT_DIR = os.path.join(OUTPUT_ROOT_PDF, ".checkpoints")
+    try:
+        os.makedirs(CHECKPOINT_DIR, exist_ok=True)
+    except Exception:
+        pass
+
+def configure_checkpoint(dir_path: str | None = None, *, enable: bool | None = None, resume: bool | None = None):
+    """Configure checkpointing directory and switches."""
+    global CHECKPOINT_DIR, ENABLE_CHECKPOINT, RESUME_FROM_CHECKPOINT
+    if dir_path:
+        CHECKPOINT_DIR = os.path.abspath(dir_path)
+        try:
+            os.makedirs(CHECKPOINT_DIR, exist_ok=True)
+        except Exception:
+            pass
+    if enable is not None:
+        ENABLE_CHECKPOINT = bool(enable)
+    if resume is not None:
+        RESUME_FROM_CHECKPOINT = bool(resume)
 
 def get_official_title_from_doi(doi):
     """
@@ -885,36 +909,85 @@ def DownloadFileByUrl(DownloadUrl, FileTitle, subdirectory="main", teacher: str 
     save_path = os.path.join(OUTPUT_ROOT_PDF, folder_teacher, subdirectory)
     os.makedirs(save_path, exist_ok=True)
     full_path = os.path.join(save_path, file_name)
+    part_path = full_path + ".part"
 
     try:
         if not production_mode:
             print(f"Downloading from: {DownloadUrl}")
-        # Stream the response to reduce memory footprint and start writing early
+        # Prepare for resume if partial exists
+        existing = 0
+        if os.path.exists(part_path):
+            try:
+                existing = os.path.getsize(part_path)
+            except Exception:
+                existing = 0
         dl_headers = {**DEFAULT_HEADERS, "Accept": "application/pdf,application/octet-stream;q=0.9,*/*;q=0.8"}
+        if existing > 0:
+            dl_headers["Range"] = f"bytes={existing}-"
+        # Stream the response to reduce memory footprint and start writing early
         with session.get(DownloadUrl, timeout=60, headers=dl_headers, stream=True) as r:
+            # If server doesn't support range it may return 200; if we tried to resume, restart from 0
+            if existing > 0 and r.status_code == 200:
+                if not production_mode:
+                    print("Server does not support resume (Range). Restarting from beginning.")
+                existing = 0
             r.raise_for_status()
 
             content_type = (r.headers.get('Content-Type') or '').lower()
-            first_chunk = None
             wrote_any = False
-            with open(full_path, "wb") as code:
+
+            # When starting from 0, validate first chunk to ensure it's a PDF
+            need_header_check = (existing == 0)
+
+            # Open file handle appropriately
+            mode = "ab" if existing > 0 else "wb"
+            with open(part_path, mode) as code:
+                if existing == 0:
+                    first_chunk = None
                 for chunk in r.iter_content(chunk_size=1024 * 256):  # 256KB chunks
                     if not chunk:
                         continue
-                    if first_chunk is None:
-                        first_chunk = chunk
-                        # Validate PDF content early
-                        is_pdf = ('pdf' in content_type) or (first_chunk[:4] == b'%PDF')
-                        if not is_pdf:
-                            if not production_mode:
-                                print(f"Error: The content at the URL is not a PDF. Content-Type: {r.headers.get('Content-Type')}")
-                                print("Skipping download.")
-                            return None
-                        code.write(first_chunk)
-                        wrote_any = True
-                        continue
+                    if need_header_check:
+                        if first_chunk is None:
+                            first_chunk = chunk
+                            # Validate PDF content early
+                            is_pdf = ('pdf' in content_type) or (first_chunk[:4] == b'%PDF')
+                            if not is_pdf:
+                                if not production_mode:
+                                    print(f"Error: The content at the URL is not a PDF. Content-Type: {r.headers.get('Content-Type')}")
+                                    print("Skipping download.")
+                                return None
+                            code.write(first_chunk)
+                            wrote_any = True
+                            continue
                     code.write(chunk)
                     wrote_any = True
+
+        # Move .part to final path atomically only if we actually wrote data this round,
+        # or we resumed from a non-empty partial and size increased.
+        moved = False
+        try:
+            grew = False
+            if os.path.exists(part_path):
+                try:
+                    size_now = os.path.getsize(part_path)
+                    grew = (existing > 0 and size_now > existing)
+                except Exception:
+                    grew = False
+            if wrote_any or grew:
+                try:
+                    os.replace(part_path, full_path)
+                    moved = True
+                except Exception:
+                    # Fallback copy
+                    try:
+                        shutil.copy2(part_path, full_path)
+                        os.remove(part_path)
+                        moved = True
+                    except Exception:
+                        pass
+        except Exception:
+            pass
 
         if production_mode:
             print(f"Downloaded: {file_name}")
@@ -923,7 +996,7 @@ def DownloadFileByUrl(DownloadUrl, FileTitle, subdirectory="main", teacher: str 
                 print(f"File '{file_name}' has been downloaded successfully to '{save_path}'.")
             else:
                 print(f"Download produced no data for '{file_name}'.")
-        return full_path if wrote_any else None
+        return full_path if (moved or wrote_any) else None
     except requests.exceptions.RequestException as e:
         if not production_mode:
             print(f"Failed to download file: {e}")
@@ -1256,7 +1329,70 @@ def download_with_references_concurrent(initial_doi: str, depth: int = 1, max_wo
     processed_dois = set()
     current_level = {initial_doi}
 
-    for d in range(0, max(0, depth) + 1):
+    # --- checkpoint helpers ---
+    def _ckpt_name() -> str:
+        t = sanitize_folder_name(teacher or "sample")
+        # keep DOI chars safe
+        d = sanitize_file_title(initial_doi)
+        return f"task__{t}__{d}.json"
+
+    def _ckpt_path() -> str:
+        base = CHECKPOINT_DIR or os.path.join(OUTPUT_ROOT_PDF, ".checkpoints")
+        try:
+            os.makedirs(base, exist_ok=True)
+        except Exception:
+            pass
+        return os.path.join(base, _ckpt_name())
+
+    def _save_ckpt(state: dict):
+        if not ENABLE_CHECKPOINT:
+            return
+        try:
+            path = _ckpt_path()
+            tmp = path + ".tmp"
+            with open(tmp, 'w', encoding='utf-8') as f:
+                json.dump(state, f, ensure_ascii=False, indent=2)
+            os.replace(tmp, path)
+        except Exception:
+            pass
+
+    def _load_ckpt() -> dict | None:
+        if not ENABLE_CHECKPOINT:
+            return None
+        try:
+            path = _ckpt_path()
+            if os.path.exists(path):
+                with open(path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except Exception:
+            return None
+        return None
+
+    def _clear_ckpt():
+        try:
+            path = _ckpt_path()
+            if os.path.exists(path):
+                os.remove(path)
+        except Exception:
+            pass
+
+    # Try resume
+    start_depth = 0
+    cited_done = False
+    if RESUME_FROM_CHECKPOINT:
+        ck = _load_ckpt()
+        if ck and ck.get("root_doi") == initial_doi and (ck.get("teacher") == (teacher or "sample")):
+            try:
+                start_depth = int(ck.get("current_depth") or 0)
+                processed_dois = set(ck.get("processed", []) or [])
+                current_level = set(ck.get("current_level", []) or current_level)
+                cited_done = bool(ck.get("cited_done", False))
+                if not production_mode:
+                    print(f"Resumed from checkpoint: depth={start_depth}, processed={len(processed_dois)}, current_level={len(current_level)}")
+            except Exception:
+                pass
+
+    for d in range(start_depth, max(0, depth) + 1):
         if not current_level:
             break
         subdir = "main" if d == 0 else f"ref{d}"
@@ -1347,8 +1483,20 @@ def download_with_references_concurrent(initial_doi: str, depth: int = 1, max_wo
                         print(f"Error processing DOI {doi}: {e}")
                     processed_dois.add(doi)
 
+        # Persist checkpoint at a safe point (end of a depth before cited-by)
+        _save_ckpt({
+            "version": 1,
+            "root_doi": initial_doi,
+            "teacher": teacher or "sample",
+            "current_depth": d,
+            "processed": sorted(processed_dois),
+            "current_level": sorted(next_level),
+            "cited_done": cited_done,
+            "ts": datetime.utcnow().isoformat() + 'Z'
+        })
+
         # After finishing depth 0 (main), optionally fetch and download 'cited-by' set (no further recursion)
-        if d == 0 and cited:
+        if d == 0 and cited and not cited_done:
             try:
                 cited_set: set[str] = set()
                 for root_doi in batch:
@@ -1385,10 +1533,25 @@ def download_with_references_concurrent(initial_doi: str, depth: int = 1, max_wo
             except Exception as e:
                 if not production_mode:
                     print(f"Failed to fetch/process cited-by DOIs: {e}")
+            finally:
+                cited_done = True
+                # Save after cited-by completion
+                _save_ckpt({
+                    "version": 1,
+                    "root_doi": initial_doi,
+                    "teacher": teacher or "sample",
+                    "current_depth": d,
+                    "processed": sorted(processed_dois),
+                    "current_level": sorted(next_level),
+                    "cited_done": True,
+                    "ts": datetime.utcnow().isoformat() + 'Z'
+                })
 
         current_level = next_level
 
     print(f"\n--- Concurrent iterative download complete. Total unique articles processed: {len(processed_dois)} ---")
+    # Clear checkpoint on success
+    _clear_ckpt()
 
 
 def parse_results_file(path: str) -> dict:
@@ -1478,6 +1641,10 @@ if __name__ == "__main__":
     parser.add_argument('--no-cited', dest='cited', action='store_false', help='Disable downloading cited-by (被引) articles for root DOIs. Enabled by default.')
     # New: only filter main, and download ref1 & cited results
     parser.add_argument('--only-ref1-cited', action='store_true', help='先筛选 main，不下载 main PDF；仅下载 ref1 与 cited 的筛选结果。')
+    # Checkpoint & resume
+    parser.add_argument('--resume', action='store_true', help='从上次断点继续（如果存在 checkpoint）。')
+    parser.add_argument('--no-checkpoint', action='store_true', help='运行时不写入 checkpoint。')
+    parser.add_argument('--checkpoint-dir', type=str, default=None, help='自定义 checkpoint 存放目录（默认在 Downloads_pdf/.checkpoints）。')
     parser.set_defaults(cited=True)
     args = parser.parse_args()
 
@@ -1496,6 +1663,11 @@ if __name__ == "__main__":
 
     # Configure outputs
     configure_outputs(args.pdf_root)
+    # Configure checkpointing
+    try:
+        configure_checkpoint(dir_path=args.checkpoint_dir, enable=(not getattr(args, 'no_checkpoint', False)), resume=getattr(args, 'resume', False))
+    except Exception:
+        pass
     # Restrict saving to a specific depth, if requested
     SAVE_ONLY_DEPTH = args.save_only_depth
     # Page count threshold
