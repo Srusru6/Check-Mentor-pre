@@ -40,11 +40,3 @@ Downloads_pdf
 			main/   # 原文
 			ref1/   # 一级引用
 			ref2/   # 一二级引用中的筛选年轻作者文章
-
-### 根据 DOI 下载“被引”论文（反向引用）
-
-现在已合并进主下载器 `DOIdownloader/download.py` 并默认开启：对每个根 DOI，会通过 OpenAlex 查询所有“被引”DOI，并下载到 `cited/` 目录。
-
-可选参数：
-- `--openalex-email you@example.com` 用于 OpenAlex mailto 参数（建议提供）。
-- `--no-cited` 关闭该功能。
