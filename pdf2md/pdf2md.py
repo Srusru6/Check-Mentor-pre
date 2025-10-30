@@ -10,10 +10,11 @@ import json
 from collections import defaultdict
 
 
-file_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Downloads_pdf", "王剑威")
-output_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Downloads_md", "王剑威")
+file_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Downloads_pdf", "曹庆宏")
+output_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Downloads_md", "曹庆宏")
 
-token = "eyJ0eXBlIjoiSldUIiwiYWxnIjoiSFM1MTIifQ.eyJqdGkiOiIwMzA2OTgiLCJyb2wiOiJST0xFX1JFR0lTVEVSLFJPTEVfREFUQVNFVCIsImlzcyI6Ik9wZW5YTGFiIiwiaWF0IjoxNzM2NDc2NTM0LCJjbGllbnRJZCI6IjRtMndvbmVta3Yycm0zN253ZW44IiwicGhvbmUiOiIiLCJ1dWlkIjoiOGFmYmY3YzUtYzQ4NS00ODg5LWFlZjQtZDczZDM5ZmZmZGRjIiwiZW1haWwiOiJPcGVuRGF0YUxhYkBwamxhYi5vcmcuY24iLCJleHAiOjE4OTQxNTY1MzR9.zsobQWe9Wn5XpWdVrBUdZOVfkWLSXOiWUfwUtgnUuqcrY5BUsgtsgsFhKNd8en79Ho_2QzxNySYYHuSrEiRGFQ"
+# 优先从环境变量读取 MinerU API Token；若未设置则回退为当前默认值
+token = os.getenv("MINERU_TOKEN") or "eyJ0eXBlIjoiSldUIiwiYWxnIjoiSFM1MTIifQ.eyJqdGkiOiIwMzA2OTgiLCJyb2wiOiJST0xFX1JFR0lTVEVSLFJPTEVfREFUQVNFVCIsImlzcyI6Ik9wZW5YTGFiIiwiaWF0IjoxNzM2NDc2NTM0LCJjbGllbnRJZCI6IjRtMndvbmVta3Yycm0zN253ZW44IiwicGhvbmUiOiIiLCJ1dWlkIjoiOGFmYmY3YzUtYzQ4NS00ODg5LWFlZjQtZDczZDM5ZmZmZGRjIiwiZW1haWwiOiJPcGVuRGF0YUxhYkBwamxhYi5vcmcuY24iLCJleHAiOjE4OTQxNTY1MzR9.zsobQWe9Wn5XpWdVrBUdZOVfkWLSXOiWUfwUtgnUuqcrY5BUsgtsgsFhKNd8en79Ho_2QzxNySYYHuSrEiRGFQ"
 header = {
     "Content-Type": "application/json",
     "Authorization": f"Bearer {token}"
@@ -128,6 +129,7 @@ def process_zip_file(zip_path: Path):
             members = [info for info in zf.infolist() if not info.is_dir()]
 
             has_full_md = False
+            has_full_json = False
             for info in members:
                 filename = info.filename.strip('/')
 
@@ -138,6 +140,14 @@ def process_zip_file(zip_path: Path):
                             shutil.copyfileobj(src, dst)
                         print(f"生成: {md_target}")
                     has_full_md = True
+                elif filename == 'full.json':
+                    json_target = parent_dir / f"{stem_name}.json"
+                    # 若不存在则写入（存在则沿用已有）
+                    if not json_target.exists():
+                        with zf.open(info) as src, open(json_target, 'wb') as dst:
+                            shutil.copyfileobj(src, dst)
+                        print(f"生成JSON: {json_target}")
+                    has_full_json = True
                 elif filename.startswith('images/') or filename.startswith('./images/'):
                     rel_path = Path(filename.replace('\\', '/').lstrip('./'))
                     if rel_path.parts[0] == 'images':
@@ -149,6 +159,9 @@ def process_zip_file(zip_path: Path):
                         print(f"添加图片: {target_file}")
             if not has_full_md:
                 print(f"警告: {zip_path} 不包含 full.md")
+            if not has_full_json:
+                # 某些任务可能不返回 full.json，非致命
+                pass
 
     except Exception as e:
         print(f"失败 {zip_path}: {e}")
@@ -199,6 +212,17 @@ def replicate_files(file_dict: dict):
             target_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(existing_file, target_path)
             print(f"   🔖 复制到: {target_path}")
+
+        # 若存在对应的 JSON（与 .md 同名），也一并复制
+        existing_json = existing_file.with_suffix('.json')
+        if existing_json.exists():
+            for target_path in path_objects:
+                if target_path == existing_file:
+                    continue
+                target_json = target_path.with_suffix('.json')
+                target_json.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy(existing_json, target_json)
+                print(f"   📄 复制JSON到: {target_json}")
 
 replicate_files(files())
 
