@@ -66,7 +66,7 @@ class WorkflowOrchestrator:
         
         self.professor_name = professor_name
         self.test_mode = test_mode
-        # 允许外部指定数据根目录（应直接指向包含 main/ref1/ref2 的目录），
+    # 允许外部指定数据根目录（应直接指向包含 main/ref1/cited 的目录），
         # 默认仍为 data/{professor_name}
         self.data_root = Path(data_root) if data_root else Path(f"data/{self.professor_name}")
         

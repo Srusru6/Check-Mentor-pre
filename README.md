@@ -1,171 +1,99 @@
 # Check-Mentor
 
-一条龙的学术开盒工具：从 DOI 下载论文、批量 PDF → Markdown 转换、合并元数据、到 LLM 驱动的三大工作流分析（核心贡献、领域热点、本科生项目建议），最终输出中英文报告。
+统一的学术开盒流水线：从 DOI 下载 → PDF 转 Markdown → 合并元数据 → LLM 工作流分析（核心贡献 / 领域热点 / 本科生项目），生成中/英文报告。
 
-本仓库已将所有程序运行整合到 `main.py`，可通过子命令统一调用。
+本项目已将所有命令整合到 `main.py`（Windows PowerShell 示例）。
 
-## 依赖安装
-
-Windows PowerShell 中执行（已内置 Python 环境请替换为对应解释器）：
+## 安装
 
 ```powershell
 python -m pip install -r requirements.txt
 ```
 
 主要依赖：
-- LangChain 及 OpenAI 接口（analysis 使用）
-- requests、beautifulsoup4（下载器）
-- python-Levenshtein（标题相似度校验）
+- LangChain + OpenAI（分析），DashScope 可选（备用模型）
+- requests、beautifulsoup4（下载）
+- python-Levenshtein（标题相似度）
 
-## 环境变量与配置
+## 配置
 
-1) 在项目根目录创建 `.env`（用于分析阶段 LLM 调用）：
+- 在根目录复制 `.env.example` 为 `.env`，填入 LLM 信息（用于分析阶段）：
+    - OPENAI_API_KEY、OPENAI_API_BASE、LLM_MODEL
+    - 可选：DASHSCOPE_API_KEY、LLM_FALLBACK_MODEL
+- MinerU Token（PDF→MD）：设置环境变量 `MINERU_TOKEN` 或在命令中通过 `--token` 传入
+- 可选 `config.ini`（仅下载器使用）：Top-N、近几年筛选等
 
-```
-OPENAI_API_KEY=你的OpenAIKey
-OPENAI_API_BASE=https://api.openai.com/v1
-LLM_MODEL=DeepSeek-V3
+## 数据目录
 
-# 可选：备用模型（阿里通义）
-DASHSCOPE_API_KEY=你的DashScopeKey
-LLM_FALLBACK_MODEL=qwen-plus
-```
-
-	Downloads_pdf/
-		老师名字/
-			main/   # 原文
-			ref1/   # 一级引用
-            cited/   # 一二级引用中的筛选年轻作者文章
-2) MinerU Token（PDF → Markdown 服务）：
-
-将 `MINERU_TOKEN` 设为环境变量，或在运行 `pdf2md` 子命令时通过 `--token` 传入。
-
-3) `config.ini`（可选，仅 DOIdownloader 使用）：可配置下载策略，例如 Top-N、近几年筛选等。
-
-## 数据目录结构
-
-下载与转换阶段：
-
-	Downloads_md/
-		老师名字/
-			main/   # 原文
-			ref1/   # 一级引用
-            cited/   # 一二级引用中的筛选年轻作者文章
-# 学术开盒 Demo (Academic Insight Extractor)
 ```
 Downloads_pdf/
-  老师名字/
-    main/
-    ref1/
-    ref2/
-    cited/
+    老师/
+        main/ ref1/ cited/
 
-Downloads_md/
-  老师名字/
-    main/
-    ref1/
-    ref2/
+data/
+    老师/
+        main/ ref1/ cited/
 ```
 
-分析阶段默认直接读取 `Downloads_md/老师名字/` 下的 `main/ref1/ref2`。如需自定义数据位置，可通过 `--data-root` 覆盖。
+分析默认读取 `data/老师/` 的 `main/ref1/cited`。下载历史会写入各层 `history.json`。
 
-每个层级目录都会维护 `history.json`（下载/合并时生成/更新），包含标题、DOI、作者、出版年月、（可选）年轻作者标识等。
+本仓库已附带样例：
+- `DOIdownloader/results.txt`：示例教师与 DOI 列表
+- `data/示例老师/`：包含一个示例 Markdown 论文
 
-## 一体化命令（main.py）
-
-所有命令均在项目根目录执行，示例基于 Windows PowerShell：
+## 一体化命令
 
 1) 下载 PDF（封装 `DOIdownloader/download.py`）
-
 ```powershell
 python .\main.py download --from-results AUTO --workers 6 --depth 1 --pdf-root .\Downloads_pdf
-# 或按DOI手动指定
-python .\main.py download --doi "10.xxxx/aaaa,10.yyyy/bbbb" --teacher "张三" --depth 1 --workers 4
+# 或手动指定DOI
+python .\main.py download --doi "10.1038/nphys4074" --teacher "示例老师" --depth 1 --workers 4
 ```
 
-2) PDF → Markdown（封装 `pdf2md/pdf2md.py`）
-
+2) PDF → Markdown（封装 `DOIdownloader/pdf2md.py`）
 ```powershell
-python .\main.py pdf2md --teacher "张三" --pdf-root .\Downloads_pdf --md-root .\Downloads_md --subdirs main,ref1,ref2 --token $env:MINERU_TOKEN
+python .\main.py pdf2md --teacher "示例老师" --pdf-root .\Downloads_pdf --md-root .\data --subdirs main,ref1,cited --token $env:MINERU_TOKEN
 ```
 
-3) 合并 history.json（封装 `DOIdownloader/merge_history_to_md.py`）
-
+3) 合并下载历史到 data（封装 `DOIdownloader/merge_history_to_md.py`）
 ```powershell
-python .\main.py merge-history --teacher "张三" --subdir main
-python .\main.py merge-history --teacher "张三" --subdir ref1
-python .\main.py merge-history --teacher "张三" --subdir ref2
+python .\main.py merge-history --teacher "示例老师" --subdir main
+python .\main.py merge-history --teacher "示例老师" --subdir ref1
+python .\main.py merge-history --teacher "示例老师" --subdir cited
 ```
 
-4) 分析并生成报告（默认读取 `Downloads_md/张三`）
-
+4) 分析并生成报告（默认读 `data/示例老师`）
 ```powershell
-python .\main.py analyze --target "张三" --test-mode
-# 或使用自定义数据根目录
-python .\main.py analyze --target "张三" --data-root d:\data\z3_md
-```
-.
-├── cache/                  # 缓存目录，存储工作流的中间结果
-├── core/                   # 核心逻辑模块
-│   ├── workflows/          # 各个问题的工作流
-│   │   ├── workflow_contribution.py
-│   │   ├── workflow_field_problems.py
-│   │   └── workflow_undergrad_projects.py
-│   ├── config.py           # 从 .env 加载配置
-│   ├── data_manager.py     # 管理 JSON 格式的缓存数据
-│   ├── metadata_manager.py # 论文元数据管理 (NEW!)
-│   ├── final_analysis.py   # 生成最终综合报告
-│   └── workflow_orchestrator.py # 工作流编排器
-├── data/                   # 输入数据
-│   ├── metadata_example.json # 元数据格式示例 (NEW!)
-│   └── 王剑威/             # 按教授姓名组织
-│       ├── main/           # 教授代表作
-│       │   └── metadata.json # 论文元数据 (可选)
-│       ├── ref1/           # 关键参考文献
-│       │   └── metadata.json # 论文元数据 (可选)
-│       └── cited/           # 潜在项目文献
-│           └── metadata.json # 论文元数据 (可选)
-├── output/                 # 输出目录
-│   └── ..._final_report.md # 最终生成的 Markdown 报告
-├── .env.example            # 环境变量示例文件
-├── .venv/                  # Python 虚拟环境
-├── main.py                 # 项目主入口点
-├── metadata_tools.py       # 元数据管理工具 (NEW!)
-├── METADATA_README.md      # 元数据功能详细文档 (NEW!)
-├── METADATA_QUICKSTART.md  # 元数据功能快速入门 (NEW!)
-├── README.md               # 项目说明文件
-└── requirements.txt        # Python 依赖列表
+python .\main.py analyze --target "示例老师" --test-mode
+# 或自定义数据根：
+python .\main.py analyze --target "示例老师" --data-root D:\data\示例老师
 ```
 
-## 安装与配置
+5) 一条龙（PDF→MD→合并→分析）
+```powershell
+python .\main.py run-all --target "示例老师" --token $env:MINERU_TOKEN --test-mode
+```
 
-1.  **克隆仓库**
-    ```bash
-    git clone <your-repository-url>
-    cd <repository-name>
-    ```
+报告输出：`output/示例老师_final_report.md`
 
-2.  **创建并激活 Python 虚拟环境**
-    ```bash
-    # 创建虚拟环境
-    python -m venv .venv
+## 模块
 
-    # 激活虚拟环境 (Windows PowerShell)
-    ./.venv/Scripts/Activate.ps1
-    
-    # 激活虚拟环境 (macOS/Linux)
-    # source .venv/bin/activate
-    ```
+- `DOIdownloader/download.py`：从 `results.txt` 读取教师与 DOI，按层级下载（含可选被引 cited）
+- `DOIdownloader/pdf2md.py`：调用 MinerU API 批量转换 PDF→Markdown，保留 full.json、图片
+- `DOIdownloader/merge_history_to_md.py`：将 PDF 端与 MD 端历史合并至 `data`
+- `core/*`：三大工作流与最终报告整合/翻译
 
-3.  **安装依赖**
-    ```bash
-    pip install -r requirements.txt
-    ```
+## 常见问题
 
-4.  **配置环境变量**
-    - 将 `.env.example` 文件复制一份并重命名为 `.env`。
-    - 打开 `.env` 文件，填入你的 API 密钥和终结点（Base URL）。
-      ```env
+- 缺少 langchain/openai 等依赖：先执行 `pip install -r requirements.txt`
+- 未设置 MinerU Token：`pdf2md` 子命令需 `--token` 或环境变量 `MINERU_TOKEN`
+- 分析需 LLM Key：`analyze` 会校验 OPENAI_API_KEY
+
+## 质量门（快速结论）
+
+- Build：PASS（CLI 帮助可用；分析需依赖已安装）
+- Lint/Typecheck：未强制（建议本地执行）
+- Tests：无（建议用样例教师快速试跑）
       OPENAI_API_KEY="YOUR_API_KEY_HERE"
       OPENAI_API_BASE="YOUR_API_BASE_URL_HERE"
 
@@ -180,7 +108,7 @@ python .\main.py analyze --target "张三" --data-root d:\data\z3_md
     - 在新创建的教授文件夹内，建立三个子目录：`main`, `ref1`, `cited`。
       - `main/`: 存放教授的**核心代表作**。
       - `ref1/`: 存放用于分析**领域热点**的关键参考文献。
-          - `ref2/`: 存放用于启发**本科生项目**的复杂度适中的论文。
+      - `cited/`: 存放用于启发**本科生项目**的复杂度适中的论文。
     - 将整理好的论文（`.md` 格式）放入对应的文件夹中。
     - **[可选]** 添加论文元数据以提升分析质量（详见下方"元数据功能"部分）。
 
@@ -325,15 +253,15 @@ python .\main.py run-all --target "张三" --token $env:MINERU_TOKEN --test-mode
 ## 模块说明
 
 - `DOIdownloader/download.py`：支持从 `results.txt` 读取教师与 DOIs 映射，按层级下载 PDF（含可选被引 cited）。
-- `pdf2md/pdf2md.py`：调用 MinerU API 批量转换 PDF → Markdown，并保留 full.json 与图片。
-- `DOIdownloader/merge_history_to_md.py`：将 PDF 端与 MD 端历史合并至 `Downloads_md`，便于统一查看。
+- `DOIdownloader/pdf2md.py`：调用 MinerU API 批量转换 PDF → Markdown，并保留 full.json 与图片。
+- `DOIdownloader/merge_history_to_md.py`：将 PDF 端与 MD 端历史合并至 `data`，便于统一查看。
 - `core/*`：三大工作流与最终报告整合、翻译输出。
 
 ## 常见问题
 
 - 缺少依赖（如 langchain_*）提示：请先 `pip install -r requirements.txt`。
 - MinerU Token 未设置：`pdf2md` 子命令需 `--token` 或环境变量 `MINERU_TOKEN`。
-- 未找到数据：`analyze` 默认读取 `Downloads_md/<教师>`；若你将 MD 放在其他路径，请使用 `--data-root` 指定。
+- 未找到数据：`analyze` 默认读取 `data/<教师>`；若你将 MD 放在其他路径，请使用 `--data-root` 指定。
 
 ## 质量门（快速结论）
 
