@@ -245,12 +245,12 @@ def convert_pdfs_to_md(teacher: str, pdf_root: str | Path, md_root: str | Path, 
 
 
 def main():
-    ap = argparse.ArgumentParser(description="批量将 Downloads_pdf/<教师> 下的PDF转换为Markdown到 Downloads_md/<教师>")
+    ap = argparse.ArgumentParser(description="批量将 Downloads_pdf/<教师> 下的PDF转换为Markdown到 data/<教师>")
     ap.add_argument('--teacher', required=True, help='教师名称（用于文件夹名）')
     ap.add_argument('--pdf-root', default=str(Path(__file__).resolve().parents[1] / 'Downloads_pdf'), help='PDF根目录，默认 ../Downloads_pdf')
-    ap.add_argument('--md-root', default=str(Path(__file__).resolve().parents[1] / 'Downloads_md'), help='MD输出根目录，默认 ../Downloads_md')
+    ap.add_argument('--md-root', default=str(Path(__file__).resolve().parents[1] / 'data'), help='MD输出根目录，默认 ../data')
     ap.add_argument('--token', default=os.getenv('MINERU_TOKEN', ''), help='MinerU API Token，默认读环境变量 MINERU_TOKEN')
-    ap.add_argument('--subdirs', default=None, help='仅处理这些子目录，逗号分隔，例如 main,ref1,ref2')
+    ap.add_argument('--subdirs', default=None, help='仅处理这些子目录，逗号分隔，例如 main,ref1,cited')
     ap.add_argument('--limit', type=int, default=None, help='最多处理的文件数（可选）')
     args = ap.parse_args()
 

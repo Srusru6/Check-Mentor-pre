@@ -16,11 +16,10 @@ def cmd_analyze(ns: argparse.Namespace) -> int:
     from core.workflow_orchestrator import WorkflowOrchestrator
     target = ns.target
     data_root = ns.data_root
-    # 若未指定 data_root，优先使用 Downloads_md/<target>，否则回退到 data/<target>
+    # 若未指定 data_root，默认使用 data/<target>
     if not data_root:
         repo = Path(__file__).resolve().parent
-        dl_md = repo / 'Downloads_md' / target
-        data_root = str(dl_md) if dl_md.exists() else None
+        data_root = str(repo / 'data' / target)
 
     orchestrator = WorkflowOrchestrator(
         professor_name=target,
@@ -63,7 +62,7 @@ def cmd_download(ns: argparse.Namespace) -> int:
 
 def cmd_pdf2md(ns: argparse.Namespace) -> int:
     repo = Path(__file__).resolve().parent
-    script = repo / 'pdf2md' / 'pdf2md.py'
+    script = repo / 'DOIdownloader' / 'pdf2md.py'
     argv = ['--teacher', ns.teacher]
     if ns.pdf_root:
         argv += ['--pdf-root', ns.pdf_root]
@@ -88,33 +87,33 @@ def cmd_merge_history(ns: argparse.Namespace) -> int:
 
 
 def cmd_run_all(ns: argparse.Namespace) -> int:
-    # 仅整合：pdf2md -> merge_history(main/ref1/ref2) -> analyze
+    # 仅整合：pdf2md -> merge_history(main/ref1/cited) -> analyze
     repo = Path(__file__).resolve().parent
     teacher = ns.target
     pdf_root = ns.pdf_root or str(repo / 'Downloads_pdf')
-    md_root = ns.md_root or str(repo / 'Downloads_md')
+    md_root = ns.md_root or str(repo / 'data')
 
-    # 1) 转换 PDF -> MD（限定 main/ref1/ref2）
+    # 1) 转换 PDF -> MD（限定 main/ref1/cited）
     print("[1/3] Converting PDFs to Markdown...")
     ret = cmd_pdf2md(argparse.Namespace(
         teacher=teacher,
         pdf_root=pdf_root,
         md_root=md_root,
         token=ns.token,
-        subdirs='main,ref1,ref2',
+    subdirs='main,ref1,cited',
         limit=ns.limit,
     ))
     if ret != 0:
         return ret
 
     # 2) 合并 history.json（供前端/后续查看）
-    print("[2/3] Merging histories into Downloads_md...")
-    for sd in ['main', 'ref1', 'ref2']:
+    print("[2/3] Merging histories into data...")
+    for sd in ['main', 'ref1', 'cited']:
         r = cmd_merge_history(argparse.Namespace(teacher=teacher, subdir=sd))
         if r != 0:
             return r
 
-    # 3) 分析（直接使用 Downloads_md/<teacher> 作为数据根）
+    # 3) 分析（直接使用 data/<teacher> 作为数据根）
     print("[3/3] Running analysis...")
     return cmd_analyze(argparse.Namespace(target=teacher, test_mode=ns.test_mode, data_root=str(Path(md_root) / teacher)))
 
@@ -127,7 +126,7 @@ def build_parser() -> argparse.ArgumentParser:
     pa = sub.add_parser('analyze', help='运行分析工作流，生成最终报告')
     pa.add_argument('--target', required=True, help='要分析的目标教授姓名')
     pa.add_argument('--test-mode', action='store_true', help='测试模式，仅处理少量数据')
-    pa.add_argument('--data-root', default=None, help='数据根目录（包含 main/ref1/ref2 的目录）；默认优先使用 Downloads_md/<target>')
+    pa.add_argument('--data-root', default=None, help='数据根目录（包含 main/ref1/cited 的目录）；默认 data/<target>')
     pa.set_defaults(func=cmd_analyze)
 
     # download
@@ -144,19 +143,19 @@ def build_parser() -> argparse.ArgumentParser:
     pd.set_defaults(func=cmd_download)
 
     # pdf2md
-    pp = sub.add_parser('pdf2md', help='批量将 PDF 转换为 MD（封装 pdf2md/pdf2md.py）')
+    pp = sub.add_parser('pdf2md', help='批量将 PDF 转换为 MD（封装 DOIdownloader/pdf2md.py）')
     pp.add_argument('--teacher', required=True, help='教师名称（输入/输出目录名）')
     pp.add_argument('--pdf-root', default=None, help='PDF 根目录（默认 ./Downloads_pdf）')
-    pp.add_argument('--md-root', default=None, help='MD 根目录（默认 ./Downloads_md）')
+    pp.add_argument('--md-root', default=None, help='MD 根目录（默认 ./data）')
     pp.add_argument('--token', default=None, help='MinerU API Token（默认读环境变量 MINERU_TOKEN）')
-    pp.add_argument('--subdirs', default=None, help='限定处理子目录，逗号分隔，如 main,ref1,ref2')
+    pp.add_argument('--subdirs', default=None, help='限定处理子目录，逗号分隔，如 main,ref1,cited')
     pp.add_argument('--limit', type=int, default=None, help='最多处理的文件数')
     pp.set_defaults(func=cmd_pdf2md)
 
     # merge-history
-    pm = sub.add_parser('merge-history', help='合并 Downloads_pdf 与 Downloads_md 下的 history.json')
+    pm = sub.add_parser('merge-history', help='合并 Downloads_pdf 与 data 下的 history.json')
     pm.add_argument('--teacher', required=True, help='教师名称（文件夹）')
-    pm.add_argument('--subdir', default='main', help='子目录（main|cited|ref1|ref2|...）')
+    pm.add_argument('--subdir', default='main', help='子目录（main|ref1|cited|...）')
     pm.set_defaults(func=cmd_merge_history)
 
     # run-all
@@ -164,7 +163,7 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument('--target', required=True, help='教师名称（目标教授）')
     pr.add_argument('--test-mode', action='store_true', help='测试模式，仅处理少量数据')
     pr.add_argument('--pdf-root', default=None, help='PDF 根目录（默认 ./Downloads_pdf）')
-    pr.add_argument('--md-root', default=None, help='MD 根目录（默认 ./Downloads_md）')
+    pr.add_argument('--md-root', default=None, help='MD 根目录（默认 ./data）')
     pr.add_argument('--token', default=None, help='MinerU API Token（默认读环境变量 MINERU_TOKEN）')
     pr.add_argument('--limit', type=int, default=None, help='最多处理的文件数')
     pr.set_defaults(func=cmd_run_all)
