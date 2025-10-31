@@ -11,7 +11,7 @@ import os
 import uuid
 import json
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from langchain_openai import ChatOpenAI
 from langchain_community.chat_models import ChatTongyi
@@ -57,15 +57,18 @@ class WorkflowOrchestrator:
     """
     负责调度和执行所有分析工作流的中心控制器。
     """
-    def __init__(self, professor_name: str, test_mode: bool):
+    def __init__(self, professor_name: str, test_mode: bool, data_root: Optional[str | Path] = None):
         """
         初始化所有LLM实例、工作流以及配置。
         """
         self._print_section_header("学术开盒demo - 整体流程", level=1)
         print("⚙️  Initializing Workflow Orchestrator...")
-
+        
         self.professor_name = professor_name
         self.test_mode = test_mode
+        # 允许外部指定数据根目录（应直接指向包含 main/ref1/ref2 的目录），
+        # 默认仍为 data/{professor_name}
+        self.data_root = Path(data_root) if data_root else Path(f"data/{self.professor_name}")
         
         # 1. 统一初始化LLM实例
         main_llm = ChatOpenAI(
@@ -168,7 +171,8 @@ class WorkflowOrchestrator:
         # 步骤 1: 准备和分离数据源
         self._print_section_header("任务一：准备和分离论文数据源", level=2)
         
-        base_data_path = Path(f"data/{self.professor_name}")
+        limit = config.TEST_MODE_PAPER_LIMIT if self.test_mode else 0
+        base_data_path = self.data_root
         
         # 尝试加载各个目录的元数据
         print("\n🔍 检查并加载元数据文件...")
