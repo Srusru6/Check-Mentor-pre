@@ -46,19 +46,30 @@ class ContributionWorkflow:
             print(f"    ⚠️ Error loading file {file_path}: {e}")
             return ""
 
-    def _invoke_llm_with_fallback(self, chain, paper_content):
+    def _invoke_llm_with_fallback(self, chain, paper_content, metadata_context=""):
         """
         调用LLM，如果主LLM失败，则尝试备用LLM。
         这是一个通用的调用逻辑，适用于所有单篇论文分析。
+        
+        Args:
+            chain: LangChain链
+            paper_content: 论文内容
+            metadata_context: 元数据上下文信息
         """
         try:
             # 尝试主LLM (在tqdm模式下保持静默)
-            result = chain.invoke({"paper_content": paper_content[:12000]})
+            result = chain.invoke({
+                "paper_content": paper_content[:12000],
+                "metadata_context": metadata_context
+            })
             return result
         except (OutputParserException, json.JSONDecodeError):
             # 第一次解析失败，静默重试一次
             try:
-                result = chain.invoke({"paper_content": paper_content[:12000]})
+                result = chain.invoke({
+                    "paper_content": paper_content[:12000],
+                    "metadata_context": metadata_context
+                })
                 return result
             except Exception:
                 # 重试失败，交由备用模型处理
@@ -71,7 +82,10 @@ class ContributionWorkflow:
         if self.fallback_llm:
             try:
                 fallback_chain = chain.with_components(llm=self.fallback_llm)
-                result = fallback_chain.invoke({"paper_content": paper_content[:12000]})
+                result = fallback_chain.invoke({
+                    "paper_content": paper_content[:12000],
+                    "metadata_context": metadata_context
+                })
                 return result
             except Exception:
                 # 备用模型也失败了
@@ -81,10 +95,45 @@ class ContributionWorkflow:
         return {"error": "Both main and fallback LLMs failed."}
 
 
-    def _analyze_single_paper(self, paper_content: str) -> Dict[str, Any]:
+    def _analyze_single_paper(self, paper_content: str, metadata: Dict[str, Any] = None) -> Dict[str, Any]:
         """
         使用 LLM 分析单篇论文的内容，提取研究领域和核心贡献。
+        
+        Args:
+            paper_content: 论文内容
+            metadata: 论文元数据（可选），包含发布时间、作者等信息
         """
+        # 构建元数据上下文信息
+        metadata_context = ""
+        if metadata:
+            metadata_context = "\n\n**Paper Metadata:**"
+            if metadata.get("publish_date"):
+                metadata_context += f"\n- Publication Date: {metadata['publish_date']}"
+            if metadata.get("authors"):
+                metadata_context += f"\n- Authors: {', '.join(metadata['authors'][:5])}"  # 只显示前5位作者
+                if len(metadata['authors']) > 5:
+                    metadata_context += f" (and {len(metadata['authors']) - 5} more)"
+            if metadata.get("doi"):
+                metadata_context += f"\n- DOI: {metadata['doi']}"
+            
+            # 强调新论文的重要性
+            recency_note = ""
+            if metadata.get("publish_date"):
+                try:
+                    from datetime import datetime
+                    pub_year = int(metadata['publish_date'][:4])
+                    current_year = datetime.now().year
+                    age = current_year - pub_year
+                    
+                    if age <= 2:
+                        recency_note = "\n\n**NOTE**: This is a very recent paper (published within the last 2 years). Recent papers often represent the cutting-edge of the field and should be given special attention when identifying current research directions."
+                    elif age <= 5:
+                        recency_note = "\n\n**NOTE**: This is a relatively recent paper. Consider how it reflects current trends in the field."
+                except:
+                    pass
+            
+            metadata_context += recency_note
+        
         prompt = ChatPromptTemplate.from_messages([
             ("system", """You are an expert academic analyst. Your task is to extract the key information from a research paper.
 Provide a JSON response with the following structure:
@@ -92,22 +141,76 @@ Provide a JSON response with the following structure:
   "research_area": "<The primary research area or sub-field of this paper, e.g., 'Quantum Computing', 'Photonic Integrated Circuits'>",
   "core_contribution": "<A concise, one-sentence summary of the paper's main contribution.>"
 }}"""),
-            ("user", "Please analyze the following paper content and provide the structured JSON output:\n\n---\n{paper_content}\n---")
+            ("user", "Please analyze the following paper content and provide the structured JSON output:{metadata_context}\n\n---\n{paper_content}\n---")
         ])
         
         parser = JsonOutputParser()
         chain = prompt | self.llm | parser
 
-        analysis_result = self._invoke_llm_with_fallback(chain, paper_content)
+        analysis_result = self._invoke_llm_with_fallback(
+            chain, 
+            paper_content,
+            metadata_context=metadata_context
+        )
         # 在进度条模式下，单个请求的延迟可以适当缩短或移除，
         # 因为总体速率由循环控制
         # time.sleep(1) 
         
         return analysis_result
 
+    def _cluster_papers_by_llm(self, papers: List[Dict[str, Any]]) -> Dict[str, List[str]]:
+        """
+        使用LLM对论文进行语义聚类。
+        """
+        print("    -> High-quality paper count exceeds threshold. Performing LLM-based semantic clustering...")
+
+        paper_info = [
+            {"title": p.get("title", "N/A"), "research_area": p.get("research_area", "N/A"), "core_contribution": p.get("core_contribution", "N/A")}
+            for p in papers
+        ]
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are a senior research analyst. You have been given a list of papers, each with its title, research area, and core contribution. Your task is to group these papers into 3-5 high-level research themes based on the **semantic similarity** of their research areas and contributions.
+
+Your task is **clustering, not summarization**.
+
+The output MUST be a valid JSON object where:
+- Each KEY is a concise, descriptive name for a research theme you identified (e.g., "Quantum Photonic Integration", "Topological Quantum Computing").
+- Each VALUE is a list of paper titles that belong to that theme.
+
+Example Input:
+[
+  {{"title": "Paper A", "research_area": "Quantum Computing", "core_contribution": "scalable quantum entanglement"}},
+  {{"title": "Paper B", "research_area": "Quantum Optics", "core_contribution": "multi-photon entangled states"}},
+  {{"title": "Paper C", "research_area": "Photonic Chips", "core_contribution": "topological protection on chips"}}
+]
+
+Example Output:
+{{
+  "Quantum Entanglement": ["Paper A", "Paper B"],
+  "Topological Photonics": ["Paper C"]
+}}"""),
+            ("user", "Here is the list of papers to cluster:\n\n{paper_info_json}")
+        ])
+
+        parser = JsonOutputParser()
+        chain = prompt | self.llm | parser
+
+        try:
+            paper_info_json = json.dumps(paper_info, indent=2, ensure_ascii=False)
+            cluster_result = chain.invoke({"paper_info_json": paper_info_json})
+            return cluster_result
+        except Exception as e:
+            print(f"    ⚠️ Error during LLM clustering: {e}")
+            # Fallback: if clustering fails, return a single group to avoid crashing
+            return {"All Papers": [p["title"] for p in papers]}
+
     def _synthesize_results(self, all_analyses: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         将所有论文的分析结果综合成一个总的、对本科生友好的报告。
+        
+        现在会考虑论文的时效性权重：更新的论文在综合时会被给予更多关注。
+        如果论文过多，会进行聚类和代表性采样。
         """
         # 过滤掉分析失败的论文
         valid_analyses = [analysis for analysis in all_analyses if "error" not in analysis]
@@ -117,11 +220,59 @@ Provide a JSON response with the following structure:
                 "contribution_summary": "Could not generate a summary due to lack of valid data."
             }
 
-        # 将所有分析结果打包成一个字符串
-        analysis_text = "\n\n".join([
-            f"Paper {i+1}:\n- Research Area: {analysis.get('research_area', 'N/A')}\n- Core Contribution: {analysis.get('core_contribution', 'N/A')}"
-            for i, analysis in enumerate(valid_analyses)
-        ])
+        # 按时效性得分排序（如果有的话），并构建分析文本
+        # 高得分（更新）的论文会被放在前面，在提示词中会被LLM优先考虑
+        def get_recency_score(analysis):
+            return analysis.get('recency_score', 0.5)
+        
+        sorted_analyses = sorted(valid_analyses, key=get_recency_score, reverse=True)
+        
+        # 如果论文过多，进行聚类和代表性采样
+        if len(sorted_analyses) > 10:
+            print(f"    -> Found {len(sorted_analyses)} papers. Performing clustering and representative sampling...")
+            
+            # 1. LLM语义聚类
+            clusters = self._cluster_papers_by_llm(sorted_analyses)
+            
+            # 2. 代表性提取：从每个主题中选择时效性最高的论文
+            representative_papers = []
+            paper_map = {p["title"]: p for p in sorted_analyses}
+            
+            for theme, titles in clusters.items():
+                if not titles: continue
+                
+                # 找到该主题下时效性得分最高的论文
+                theme_papers = [paper_map[title] for title in titles if title in paper_map]
+                if not theme_papers: continue
+                
+                best_paper_in_theme = max(theme_papers, key=get_recency_score)
+                representative_papers.append(best_paper_in_theme)
+            
+            # 去重
+            final_papers_for_synthesis = list({p["paper_id"]: p for p in representative_papers}.values())
+            print(f"    -> Clustered into {len(clusters)} themes. Selected {len(final_papers_for_synthesis)} representative papers for synthesis.")
+            sorted_analyses = final_papers_for_synthesis
+        else:
+            print(f"    -> Number of papers ({len(sorted_analyses)}) is manageable. Using all for synthesis.")
+        
+        # 构建分析文本，包含时效性信息
+        analysis_parts = []
+        for i, analysis in enumerate(sorted_analyses):
+            paper_text = f"Paper {i+1}:\n- Research Area: {analysis.get('research_area', 'N/A')}\n- Core Contribution: {analysis.get('core_contribution', 'N/A')}"
+            
+            # 如果有时效性信息，添加权重提示
+            recency_score = analysis.get('recency_score')
+            if recency_score is not None and recency_score != 0.5:  # 0.5是默认值
+                if recency_score > 0.8:
+                    paper_text += f"\n- **Recency Weight: HIGH** (published recently, represents cutting-edge work)"
+                elif recency_score > 0.6:
+                    paper_text += f"\n- **Recency Weight: MEDIUM-HIGH** (relatively recent work)"
+                elif recency_score < 0.3:
+                    paper_text += f"\n- **Recency Weight: LOW** (older foundational work)"
+            
+            analysis_parts.append(paper_text)
+        
+        analysis_text = "\n\n".join(analysis_parts)
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", """You are a senior science writer and mentor, tasked with writing a summary of a professor's research for a bright, motivated undergraduate student. The student is exploring research opportunities and needs to understand the professor's work: what it is, why it's important, and what its impact has been.
@@ -129,6 +280,8 @@ Provide a JSON response with the following structure:
 **Your Goal:** Transform a list of individual paper analyses into a compelling, clear, and honest narrative. Avoid overly simplistic analogies, but strive for clarity.
 
 **Your Audience:** A smart undergraduate who is familiar with basic physics/engineering concepts but is not an expert in this specific sub-field.
+
+**IMPORTANT - Temporal Weighting**: The papers are listed with recency weights. Papers marked as "HIGH" or "MEDIUM-HIGH" recency represent more recent work and should be given MORE ATTENTION in your synthesis, as they reflect the professor's current research directions and the field's cutting-edge. Older papers (marked as "LOW" recency) provide historical context but should not dominate the narrative unless they are clearly foundational breakthroughs.
 
 **Key Instructions:**
 
@@ -139,6 +292,7 @@ Provide a JSON response with the following structure:
 
 2.  **Content - Section 1: Research Directions (What they do):**
     *   Identify 3-5 primary, distinct research themes from the provided list.
+    *   **Prioritize recent work**: Focus more on themes evident in papers with HIGH recency weight.
     *   For each theme, write a short, clear paragraph. Start with the key concept, then briefly explain its goal.
     *   **"Prudent Explanation" Rule:**
         *   Identify key technical terms (e.g., "topological photonics," "quantum entanglement").
@@ -147,7 +301,9 @@ Provide a JSON response with the following structure:
 
 3.  **Content - Section 2: Contribution Summary (Why it matters & its Impact):**
     *   Synthesize the individual contributions into a big-picture overview.
+    *   **Emphasize recent contributions**: The summary should reflect the professor's current focus and recent achievements.
     *   Explain the **"Why"**: What is the grand challenge or fundamental question this professor's work is trying to address? (e.g., "making quantum computers scalable," "pushing the limits of optical communication").
+    *   Explain the **"Impact"**: How has their work advanced the field? Mention breakthroughs, pioneering work, or how they connect different ideas.
     *   Explain the **"Impact"**: How has their work advanced the field? Mention breakthroughs, pioneering work, or how they connect different ideas.
     *   Conclude with a powerful summary sentence that captures the essence of their research's significance.
 
@@ -235,24 +391,34 @@ You MUST provide a JSON response with a `research_directions` key (a list of str
 
             if cached_result:
                 single_analysis = cached_result
+                # 确保缓存的结果也包含时效性得分（如果论文有这个字段）
+                if 'recency_score' not in single_analysis and 'recency_score' in paper:
+                    single_analysis['recency_score'] = paper['recency_score']
             else:
                 content = self._load_paper_content(paper['md_filename'])
                 if not content:
                     continue
                 
-                analysis_result = self._analyze_single_paper(content)
+                # 提取元数据
+                paper_metadata = paper.get('metadata')
+                
+                analysis_result = self._analyze_single_paper(content, paper_metadata)
                 
                 # 检查LLM调用是否出错
                 if analysis_result.get("error"):
                     tqdm.write(f"    ⚠️ Skipped paper '{paper['title']}' due to LLM failure.")
                     continue
 
-                # 构建完整的分析对象
+                # 构建完整的分析对象，包含时效性得分
                 single_analysis = {
                     **analysis_result,
                     'paper_id': paper_id,
                     'title': paper['title']
                 }
+                
+                # 如果论文有时效性得分，也包含进去
+                if 'recency_score' in paper:
+                    single_analysis['recency_score'] = paper['recency_score']
                 
                 # 缓存完整的对象
                 self.cache.set(paper_id, single_analysis)

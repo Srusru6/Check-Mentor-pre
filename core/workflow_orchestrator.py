@@ -2,7 +2,7 @@
 工作流编排器 (Workflow Orchestrator)
 
 该模块是新架构的核心，负责：
-1. 接收分离后的数据源（main_papers, ref1_papers, ref2_papers）。
+1. 接收分离后的数据源（main_papers, ref1_papers, cited_papers）。
 2. 初始化并调用三个独立的工作流，分别处理三个核心问题。
 3. 收集每个工作流的分析结果。
 4. 将整合后的结果返回给主流程，用于最终报告的生成。
@@ -18,9 +18,40 @@ from langchain_community.chat_models import ChatTongyi
 
 from . import config
 from .final_analysis import FinalAnalyzer
+from .metadata_manager import MetadataManager
 from .workflows.workflow_contribution import ContributionWorkflow
 from .workflows.workflow_field_problems import FieldProblemsWorkflow
 from .workflows.workflow_undergrad_projects import UndergradProjectsWorkflow
+
+def prepare_workflow_inputs(test_mode: bool, limit: int,
+                            main_papers: List[Dict[str, Any]],
+                            ref1_papers: List[Dict[str, Any]],
+                            cited_papers: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+    """根据新规则与 test_mode，准备三条工作流的输入。
+
+    假设 main/ref1/cited 已按元数据时序排序（新→旧）。
+    """
+    if test_mode:
+        return {
+            # Workflow 1: main（不截断）
+            "wf1_main": main_papers,
+            # Workflow 2: main 前N + cited 前N（无 ref1）
+            "wf2_main": main_papers[:limit],
+            "wf2_ref1": [],
+            "wf2_cited": cited_papers[:limit],
+            # Workflow 3: 仅 cited 前N
+            "wf3_main": [],
+            "wf3_cited": cited_papers[:limit],
+        }
+    else:
+        return {
+            "wf1_main": main_papers,
+            "wf2_main": main_papers,
+            "wf2_ref1": ref1_papers,
+            "wf2_cited": cited_papers,
+            "wf3_main": main_papers,
+            "wf3_cited": cited_papers,
+        }
 
 class WorkflowOrchestrator:
     """
@@ -65,10 +96,14 @@ class WorkflowOrchestrator:
         # 2. 将LLM实例注入到各个工作流中
         self.contribution_workflow = ContributionWorkflow(main_llm, fallback_llm)
         self.field_problems_workflow = FieldProblemsWorkflow(main_llm, fallback_llm)
-        self.undergrad_projects_workflow = UndergradProjectsWorkflow(main_llm, fallback_llm)
+        # 传递测试模式标志，以便在测试模式下进行更稳健的回退处理
+        self.undergrad_projects_workflow = UndergradProjectsWorkflow(main_llm, fallback_llm, test_mode=self.test_mode)
         
         # 3. 初始化最终分析器，并注入LLM用于翻译
         self.final_analyzer = FinalAnalyzer(self.professor_name, main_llm)
+        
+        # 4. 初始化元数据管理器
+        self.metadata_manager = MetadataManager()
         
         config.validate_config()
         print("✅ Orchestrator initialized successfully.")
@@ -101,6 +136,33 @@ class WorkflowOrchestrator:
                 "md_filename": str(md_file),
             })
         return papers
+    
+    def _load_metadata_for_directory(self, dir_path: Path) -> bool:
+        """
+        为指定目录加载元数据文件（如果存在）
+        
+        元数据文件应命名为 'metadata.json' 或 'history.json' 并位于论文目录中
+        
+        Args:
+            dir_path: 论文目录路径
+            
+        Returns:
+            是否成功加载元数据
+        """
+        # 优先尝试 history.json（新格式）
+        history_file = dir_path / "history.json"
+        if history_file.exists():
+            print(f"    📋 发现元数据文件: {history_file.name}")
+            return self.metadata_manager.load_metadata_file(history_file)
+        
+        # 回退到 metadata.json（旧格式）
+        metadata_file = dir_path / "metadata.json"
+        if metadata_file.exists():
+            print(f"    📋 发现元数据文件: {metadata_file.name}")
+            return self.metadata_manager.load_metadata_file(metadata_file)
+        
+        print(f"    ℹ️  未找到元数据文件 (history.json 或 metadata.json)")
+        return False
 
     def run(self):
         """
@@ -112,22 +174,66 @@ class WorkflowOrchestrator:
         limit = config.TEST_MODE_PAPER_LIMIT if self.test_mode else 0
         base_data_path = self.data_root
         
-        # 加载教授代表作 (main) - 始终完整加载
-        main_papers = self._load_papers_from_dir(str(base_data_path / "main"), self.professor_name)
-
-        if self.test_mode:
-            print(f"  -> 运行在测试模式: 教授代表作将完整加载 ({len(main_papers)}篇) 以保证分析准确性。")
-            print(f"  -> 其余数据源 (ref1, ref2) 最多处理 {limit} 篇论文。")
-            ref1_papers = self._load_papers_from_dir(str(base_data_path / "ref1"), "Various Authors", limit)
-            ref2_papers = self._load_papers_from_dir(str(base_data_path / "ref2"), "Various Authors", limit)
+        # 尝试加载各个目录的元数据
+        print("\n🔍 检查并加载元数据文件...")
+        main_path = base_data_path / "main"
+        ref1_path = base_data_path / "ref1"
+        cited_path = base_data_path / "cited"
+        # 向后兼容：若新目录不存在但旧目录存在，则回退到旧目录
+        legacy_ref2_path = base_data_path / "ref2"
+        if not cited_path.exists() and legacy_ref2_path.exists():
+            print("  ⚠️  兼容模式：未找到 'cited' 目录，检测到旧目录 'ref2'，将临时使用 'ref2'。请尽快迁移数据到 'cited/'.")
+            cited_path = legacy_ref2_path
+        
+        print(f"  [Main] {main_path}")
+        self._load_metadata_for_directory(main_path)
+        
+        print(f"  [Ref1] {ref1_path}")
+        self._load_metadata_for_directory(ref1_path)
+        
+        print(f"  [Cited] {cited_path}")
+        self._load_metadata_for_directory(cited_path)
+        
+        # 打印元数据统计
+        if len(self.metadata_manager.metadata_cache) > 0:
+            self.metadata_manager.print_statistics()
         else:
-            ref1_papers = self._load_papers_from_dir(str(base_data_path / "ref1"), "Various Authors")
-            ref2_papers = self._load_papers_from_dir(str(base_data_path / "ref2"), "Various Authors")
+            print("    ℹ️  未加载任何元数据，将使用默认配置")
+        
+        # 加载论文 - 加载阶段不做截断，统一由后续“已按时序排序”的阶段按规则截断
+        main_papers = self._load_papers_from_dir(str(main_path), self.professor_name)
+        ref1_papers = self._load_papers_from_dir(str(ref1_path), "Various Authors")
+        cited_papers = self._load_papers_from_dir(str(cited_path), "Various Authors")
+        
+        # 为论文添加元数据信息
+        print("\n📝 为论文添加元数据...")
+        main_papers = self.metadata_manager.get_papers_with_metadata(main_papers)
+        ref1_papers = self.metadata_manager.get_papers_with_metadata(ref1_papers)
+        cited_papers = self.metadata_manager.get_papers_with_metadata(cited_papers)
+        
+        # 按发布时间对论文进行排序（更新的论文在前），为后续“先时序、再取前N”做准备
+        if len(self.metadata_manager.metadata_cache) > 0:
+            print("  ✓ 按发布时间对论文进行排序（新→旧）...")
+            main_papers = self.metadata_manager.sort_papers_by_recency(main_papers, descending=True)
+            ref1_papers = self.metadata_manager.sort_papers_by_recency(ref1_papers, descending=True)
+            cited_papers = self.metadata_manager.sort_papers_by_recency(cited_papers, descending=True)
 
         print("  -> 数据源分离完成:")
         print(f"    - 教授代表作 (main): {len(main_papers)} 篇")
         print(f"    - 引用文献 (ref1): {len(ref1_papers)} 篇")
-        print(f"    - 潜在项目文献 (ref2): {len(ref2_papers)} 篇")
+        print(f"    - 潜在项目文献 (cited): {len(cited_papers)} 篇")
+
+        # 基于新规则，准备各工作流的输入（在已排序的列表上再做截断）
+        limit = config.TEST_MODE_PAPER_LIMIT
+        prepared = prepare_workflow_inputs(self.test_mode, limit, main_papers, ref1_papers, cited_papers)
+        if self.test_mode:
+            print(f"  -> 测试模式启用：第二工作流使用 main/cited 各前{limit}篇；第三工作流使用 cited 前{limit}篇。")
+        wf1_main = prepared["wf1_main"]
+        wf2_main = prepared["wf2_main"]
+        wf2_ref1 = prepared["wf2_ref1"]
+        wf2_cited = prepared["wf2_cited"]
+        wf3_main = prepared["wf3_main"]
+        wf3_cited = prepared["wf3_cited"]
 
         # 创建日志目录
         log_dir = "log"
@@ -149,7 +255,7 @@ class WorkflowOrchestrator:
 
         # --- 工作流1: 分析教授的核心贡献 ---
         print("\n➡️ [Workflow 1/3] 分析教授的核心贡献...")
-        contribution_results = self.contribution_workflow.run(self.professor_name, main_papers)
+        contribution_results = self.contribution_workflow.run(self.professor_name, wf1_main)
         log_workflow_output("contribution", contribution_results)
         all_results['contribution_analysis'] = contribution_results
 
@@ -157,8 +263,9 @@ class WorkflowOrchestrator:
         print("\n➡️ [Workflow 2/3] 分析领域的热点问题...")
         field_problems_results = self.field_problems_workflow.run(
             professor_name=self.professor_name,
-            main_papers=main_papers,
-            ref1_papers=ref1_papers
+            main_papers=wf2_main,
+            ref1_papers=wf2_ref1,
+            cited_papers=wf2_cited,
         )
         log_workflow_output("field_problems", field_problems_results)
         all_results['field_problems_analysis'] = field_problems_results
@@ -168,9 +275,10 @@ class WorkflowOrchestrator:
         # 将工作流1的总结作为输入，传递给工作流3
         contribution_summary = contribution_results.get("contribution_summary", "")
         undergrad_projects_results = self.undergrad_projects_workflow.run(
-            self.professor_name, 
-            ref2_papers,
-            contribution_summary
+            self.professor_name,
+            wf3_main,
+            wf3_cited,
+            contribution_summary,
         )
         log_workflow_output("undergrad_projects", undergrad_projects_results)
         all_results['undergrad_projects_analysis'] = undergrad_projects_results

@@ -1,8 +1,3 @@
-__pycache__
-
-*.zip
-*.json
-*.jpg
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.pyc
@@ -34,6 +29,7 @@ share/python-wheels/
 MANIFEST
 data/
 output/
+test/
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -73,3 +69,6 @@ venv.bak/
 .idea/
 .vscode/
 *.pdf
+*.zip
+*.json
+*.jpg
