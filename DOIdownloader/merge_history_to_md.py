@@ -4,7 +4,7 @@ import argparse
 from typing import Dict, Any
 
 PDF_ROOT = os.path.join(os.getcwd(), 'Downloads_pdf')
-MD_ROOT = os.path.join(os.getcwd(), 'Downloads_md')
+MD_ROOT = os.path.join(os.getcwd(), 'data')
 
 
 def load_history(path: str) -> Dict[str, Any]:
@@ -71,9 +71,9 @@ def ensure_dir(path: str):
 
 
 def main():
-    ap = argparse.ArgumentParser(description='Merge Downloads_pdf history.json into Downloads_md history.json')
+    ap = argparse.ArgumentParser(description='Merge Downloads_pdf history.json into data history.json')
     ap.add_argument('--teacher', required=True, help='Teacher name (folder)')
-    ap.add_argument('--subdir', default='main', help='Subdirectory: main|cited|ref1|ref2|...')
+    ap.add_argument('--subdir', default='main', help='Subdirectory: main|ref1|cited|...')
     args = ap.parse_args()
 
     teacher = args.teacher

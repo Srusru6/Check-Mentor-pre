@@ -189,6 +189,45 @@ Downloads_pdf/
 每个层级目录（main/ref1/cited）会维护一个 `history.json`，记录已下载论文的：标题、DOI、引用（references）、被引（cited_by）、作者列表、出版年月（year/month）以及“年轻作者”名单。该文件在并发下载时线程安全地增量更新，自动去重（按 DOI 覆盖更新）。
 ```
 
+## PDF → Markdown 转换（pdf2md）
+
+本仓库提供了批量将 PDF 转为 Markdown 的脚本，已合并至当前模块：`DOIdownloader/pdf2md.py`，推荐通过统一入口调用：
+
+```powershell
+# 推荐：通过 main.py 调用（会将结果输出到 data/<教师> 下）
+python .\main.py pdf2md --teacher "示例老师" --pdf-root .\Downloads_pdf --md-root .\data --subdirs main,ref1,cited --token $env:MINERU_TOKEN
+
+# 或直接调用脚本（默认 pdf-root=../Downloads_pdf, md-root=../data）
+python .\DOIdownloader\pdf2md.py --teacher "示例老师" --subdirs main,ref1,cited --token $env:MINERU_TOKEN
+```
+
+说明与默认行为：
+- 依赖 MinerU API（文档：https://mineru.org.cn/apiManage/docs），需提供 `MINERU_TOKEN`。
+- 仅处理“新增”PDF：若目标目录已存在同名 `.md`，则跳过该 PDF。
+- 自动下载 MinerU 解析生成的 `.zip`，解包为：
+	- `<同名>.md`：由 `full.md` 生成
+	- `<同名>.json`（可选）：由 `full.json` 生成
+	- `images/`：解包图片资源
+- 多处同名（不同相对路径）的 PDF 会复制一份相同的 Markdown 与 JSON 到每一处（以便多层目录复用）。
+- 支持仅处理指定子目录：`--subdirs main,ref1,cited`。
+- 可限制单次处理数量：`--limit N`。
+
+可用参数（直接调用脚本时）：
+```text
+python DOIdownloader/pdf2md.py \
+	--teacher NAME \
+	[--pdf-root PATH] [--md-root PATH] \
+	[--token TOKEN] [--subdirs main,ref1,cited] [--limit N]
+```
+- `--pdf-root` 默认 `../Downloads_pdf`（相对 `DOIdownloader/`）
+- `--md-root` 默认 `../data`
+- `--token` 默认读取环境变量 `MINERU_TOKEN`
+
+常见问题：
+- 401/鉴权失败：检查 `MINERU_TOKEN` 是否有效、未过期。
+- 解析时间较长：脚本会轮询 MinerU 解析状态（2 秒一次，带最大重试）。
+- 未生成 .md：检查下载的 `.zip` 是否包含 `full.md`；若无会打印警告。
+
 ## 注意事项与建议
 
 - 学术资源请遵循相应的版权与使用政策，仅用于个人学习研究。
