@@ -3,7 +3,7 @@
 """
 
 import requests
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 import json
 
 
@@ -50,6 +50,23 @@ class InspireHEPClient:
         response = self.session.get(url, params=params, timeout=self.timeout)
         response.raise_for_status()
         return response.json()
+
+    def find_record_by_doi(self, doi: str) -> Optional[Dict]:
+        """
+        通过 DOI 搜索并返回第一条匹配的文献记录。
+
+        Args:
+            doi: DOI 字符串，例如 "10.1234/abc"
+
+        Returns:
+            命中的第一条记录（包含 id 与 metadata）的字典；若无结果则返回 None
+        """
+        query = f"doi:{doi}"
+        results = self.search_literature(query, size=1)
+        hits = results.get("hits", {}).get("hits", [])
+        if not hits:
+            return None
+        return hits[0]
     
     def get_record(self, record_id: str) -> Dict:
         """
@@ -67,6 +84,44 @@ class InspireHEPClient:
         url = f"{self.BASE_URL}/literature/{record_id}"
         
         response = self.session.get(url, timeout=self.timeout)
+        response.raise_for_status()
+        return response.json()
+
+    def get_references(self, record_id: str, size: int = 50, page: int = 1) -> Dict:
+        """
+        获取文献的参考文献（references）列表。
+
+        注意：INSPIRE-HEP 的接口通常为 /literature/{id}/references，返回格式与 hits/hits 类似。
+
+        Args:
+            record_id: INSPIRE-HEP 记录 ID
+            size: 每页数量
+            page: 页码
+
+        Returns:
+            原始 JSON 响应
+        """
+        url = f"{self.BASE_URL}/literature/{record_id}/references"
+        params = {"size": size, "page": page}
+        response = self.session.get(url, params=params, timeout=self.timeout)
+        response.raise_for_status()
+        return response.json()
+
+    def get_citations(self, record_id: str, size: int = 50, page: int = 1) -> Dict:
+        """
+        获取引用该文的文献（citations）列表。
+
+        Args:
+            record_id: INSPIRE-HEP 记录 ID
+            size: 每页数量
+            page: 页码
+
+        Returns:
+            原始 JSON 响应
+        """
+        url = f"{self.BASE_URL}/literature/{record_id}/citations"
+        params = {"size": size, "page": page}
+        response = self.session.get(url, params=params, timeout=self.timeout)
         response.raise_for_status()
         return response.json()
     
