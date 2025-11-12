@@ -2,25 +2,6 @@
 曹庆宏
 时间排序：
 
-@article{Cao:2025fla,
-    author = "Cao, Qing-Hong and Ding, Jian-Nan and Liu, Yandong and Yuan, Jin-Long",
-    title = "{Probing CP Violation through Vector Boson Fusion at High-Energy Muon Colliders}",
-    eprint = "2510.23257",
-    archivePrefix = "arXiv",
-    primaryClass = "hep-ph",
-    month = "10",
-    year = "2025"
-}
-
-@article{Song:2025odk,
-    author = "Song, Zhuo-Yang and others",
-    title = "{Iterated Agent for Symbolic Regression}",
-    eprint = "2510.08317",
-    archivePrefix = "arXiv",
-    primaryClass = "physics.comp-ph",
-    month = "10",
-    year = "2025"
-}
 
 @article{Chen:2025thj,
     author = "Chen, C. and others",
@@ -33,92 +14,6 @@
     year = "2025"
 }
 
-@article{CEPCStudyGroup:2025kmw,
-    author = "Adhya, Souvik Priyam and others",
-    collaboration = "CEPC Study Group",
-    title = "{CEPC Technical Design Report - Reference Detector}",
-    eprint = "2510.05260",
-    archivePrefix = "arXiv",
-    primaryClass = "hep-ex",
-    reportNumber = "IHEP-CEPC-DR-2025-01, IHEP-EP-2025-01",
-    month = "10",
-    year = "2025"
-}
-
-@article{Cao:2025icu,
-    author = "Cao, Qing-Hong and Yu, Zhite and Yuan, C. -P. and Zhang, Shutao and Zhu, Hua Xing",
-    title = "{Collins-type fragmentation energy correlator in semi-inclusive deep inelastic lepton-hadron scattering}",
-    eprint = "2509.18892",
-    archivePrefix = "arXiv",
-    primaryClass = "hep-ph",
-    reportNumber = "JLAB-THY-25-4544",
-    month = "9",
-    year = "2025"
-}
-
-@article{Cao:2025qua,
-    author = "Cao, Qing-Hong and Li, Guanghui and Wen, Xin-Kai and Yan, Bin",
-    title = "{Probing Quark Electromagnetic Properties via Entangled Quark Pairs in Fragmentation Hadrons at Lepton Colliders}",
-    eprint = "2509.18276",
-    archivePrefix = "arXiv",
-    primaryClass = "hep-ph",
-    reportNumber = "CPTNP-2025-035",
-    month = "9",
-    year = "2025"
-}
-
-@article{Cao:2025ync,
-    author = "Cao, Qingyun and Genov, Genko T. and Chu, Yaoming and Cai, Jianming and Liu, Yu and Retzker, Alex and Jelezko, Fedor",
-    title = "{Overcoming frequency resolution limits using a solid-state spin quantum sensor}",
-    eprint = "2506.20416",
-    archivePrefix = "arXiv",
-    primaryClass = "quant-ph",
-    month = "6",
-    year = "2025"
-}
-
-@article{Wang:2025xlg,
-    author = "Wang, Jun-Chen and Cao, Shunshun and Jiang, Jinchen and Liu, Yandong and Cao, Qing-Hong and Shao, Lijing",
-    title = "{First Constraint on Axion-Photon Coupling $g_{\gamma}$ from Neutron Star Observations}",
-    eprint = "2506.07546",
-    archivePrefix = "arXiv",
-    primaryClass = "hep-ph",
-    month = "6",
-    year = "2025"
-}
-
-@article{Cao:2025jwb,
-    author = "Cao, Qing-Hong and Tanaka, Masanori and Wang, Jun-Chen and Xie, Ke-Pan and Zhang, Jing-Jun",
-    title = "{Can we live in a baby universe formed by a delayed first-order phase transition?}",
-    eprint = "2505.23007",
-    archivePrefix = "arXiv",
-    primaryClass = "hep-ph",
-    reportNumber = "CPTNP-2025-014",
-    month = "5",
-    year = "2025"
-}
-
-@article{Cao:2025shc,
-    author = "Cao, Qing-Hong and Hou, Zong-Yue and Li, Ying-Ying and Liu, Xiaohui and Song, Zhuo-Yang and Zhang, Liang-Qi and Zhang, Shutao and Zhao, Ke",
-    title = "{Quantum State Preparation via Large-Language-Model-Driven Evolution}",
-    eprint = "2505.06347",
-    archivePrefix = "arXiv",
-    primaryClass = "quant-ph",
-    reportNumber = "CPTNP-25-0001",
-    month = "5",
-    year = "2025"
-}
-
-@article{Song:2025pwy,
-    author = "Song, Zhuo-Yang and Yang, Tong-Zhi and Cao, Qing-Hong and Luo, Ming-xing and Zhu, Hua Xing",
-    title = "{Explainable AI-assisted Optimization for Feynman Integral Reduction}",
-    eprint = "2502.09544",
-    archivePrefix = "arXiv",
-    primaryClass = "hep-ph",
-    reportNumber = "ZU-TH 07/25",
-    month = "2",
-    year = "2025"
-}
 
 @article{Cao:2024vfc,
     author = "Cao, Qing-Hong and Liu, Yandong and Yuan, Shu-Run",
@@ -129,6 +24,109 @@
     pages = "116781",
     year = "2025"
 }
+
+@article{Bi:2024tlq,
+    author = "Bi, Qi and Cao, Qing-Hong and Cheng, Kun and Zhang, Hao",
+    title = "{New observables for testing Bell inequalities in $W$ boson pair production}",
+    doi = "10.22323/1.476.0342",
+    journal = "PoS",
+    volume = "ICHEP2024",
+    pages = "342",
+    year = "2025"
+}
+
+@article{Sripotchanart:2024fak,
+    author = "Sripotchanart, Romtham and Si, Weisheng and Calheiros, Rodrigo N. and Cao, Qing and Qiu, Tie",
+    title = "{A two-step linear programming approach for repeater placement in large-scale quantum networks}",
+    doi = "10.1016/j.comnet.2024.110795",
+    journal = "Comput. Net.",
+    volume = "254",
+    pages = "110795",
+    year = "2024"
+}
+
+@article{Lu:2024ufk,
+    author = "Lu, Ying-Ying and Cao, Hai-Qing and Zuo, Hui-Juan and Fei, Shao-Ming",
+    title = "{Genuinely nonlocal sets without entanglement in multipartite systems}",
+    eprint = "2408.11566",
+    archivePrefix = "arXiv",
+    primaryClass = "quant-ph",
+    doi = "10.1103/PhysRevA.110.022427",
+    journal = "Phys. Rev. A",
+    volume = "110",
+    number = "2",
+    pages = "022427",
+    year = "2024"
+}
+
+@article{Cao:2024rzb,
+    author = "Cao, Qing-Hong and Cheng, Kun and Liu, Yandong",
+    title = "{Distinguishing Dirac from Majorana Heavy Neutrino at Future Lepton Colliders}",
+    eprint = "2403.06561",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    doi = "10.1103/PhysRevLett.134.021801",
+    journal = "Phys. Rev. Lett.",
+    volume = "134",
+    number = "2",
+    pages = "021801",
+    year = "2025"
+}
+
+@article{Cao:2023yeb,
+    author = "Cao, Qing-Hong and Cheng, Kun and Liu, Yandong and Wang, Xiao-Rui",
+    title = "{Measuring hhWW coupling at lepton colliders}",
+    eprint = "2312.07272",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    doi = "10.1103/PhysRevD.109.073005",
+    journal = "Phys. Rev. D",
+    volume = "109",
+    number = "7",
+    pages = "073005",
+    year = "2024"
+}
+
+@article{Salhov:2023hlg,
+    author = "Salhov, Alon and Cao, Qingyun and Cai, Jianming and Retzker, Alex and Jelezko, Fedor and Genov, Genko",
+    title = "{Protecting Quantum Information via Destructive Interference of Correlated Noise}",
+    eprint = "2312.02267",
+    archivePrefix = "arXiv",
+    primaryClass = "quant-ph",
+    doi = "10.1103/PhysRevLett.132.223601",
+    journal = "Phys. Rev. Lett.",
+    volume = "132",
+    number = "22",
+    pages = "223601",
+    year = "2024"
+}
+
+@article{Cao:2023mfl,
+    author = "Cao, Zhen and others",
+    title = "{Method to measure muon content of extensive air showers with LHAASO KM2A-WCDA synergy}",
+    doi = "10.1016/j.nima.2023.168958",
+    journal = "Nucl. Instrum. Meth. A",
+    volume = "1059",
+    pages = "168958",
+    year = "2024"
+}
+
+@article{Cao:2023smj,
+    author = "Cao, Qing-Hong and Guo, Jinhui and Liu, Jia and Luo, Yan and Wang, Xiao-Ping",
+    title = "{Long-lived searches of vectorlike lepton and its accompanying scalar at colliders}",
+    eprint = "2311.12934",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    doi = "10.1103/PhysRevD.110.015029",
+    journal = "Phys. Rev. D",
+    volume = "110",
+    number = "1",
+    pages = "015029",
+    year = "2024"
+}
+
+
+
 
 引用排序：
 
@@ -146,18 +144,6 @@
     year = "2008"
 }
 
-@article{CEPCStudyGroup:2018ghi,
-    author = "Dong, Mingyi and others",
-    editor = "Guimar{\~a}es da Costa, Jo{\~a}o Barreiro and others",
-    collaboration = "CEPC Study Group",
-    title = "{CEPC Conceptual Design Report: Volume 2 - Physics {\&} Detector}",
-    eprint = "1811.10545",
-    archivePrefix = "arXiv",
-    primaryClass = "hep-ex",
-    reportNumber = "IHEP-CEPC-DR-2018-02, IHEP-EP-2018-01, IHEP-TH-2018-01",
-    month = "11",
-    year = "2018"
-}
 
 @article{Cao:2007rm,
     author = "Cao, Qing-Hong and Ma, Ernest and Rajasekaran, G.",
@@ -243,17 +229,6 @@
     year = "2024"
 }
 
-@inproceedings{Buttar:2008jx,
-    author = "Buttar, C. and others",
-    title = "{Standard Model Handles and Candles Working Group: Tools and Jets Summary Report}",
-    booktitle = "{5th Les Houches Workshop on Physics at TeV Colliders}",
-    eprint = "0803.0678",
-    archivePrefix = "arXiv",
-    primaryClass = "hep-ph",
-    pages = "121--214",
-    month = "3",
-    year = "2008"
-}
 
 @article{Cao:2010zb,
     author = "Cao, Qing-Hong and McKeen, David and Rosner, Jonathan L. and Shaughnessy, Gabe and Wagner, Carlos E. M.",
@@ -267,16 +242,6 @@
     volume = "81",
     pages = "114004",
     year = "2010"
-}
-
-@article{Cao:2015pto,
-    author = "Cao, Qing-Hong and Liu, Yandong and Xie, Ke-Pan and Yan, Bin and Zhang, Dong-Ming",
-    title = "{A Boost Test of Anomalous Diphoton Resonance at the LHC}",
-    eprint = "1512.05542",
-    archivePrefix = "arXiv",
-    primaryClass = "hep-ph",
-    month = "12",
-    year = "2015"
 }
 
 @article{Berger:2011ua,
