@@ -1,0 +1,335 @@
+"""
+批量任务：从 pre-process/mid.txt 读取每位老师的 k 篇最近论文与 k 篇最高引用论文（已排序），
+下载 PDF 与元数据，并按 data/<teacher> 目录结构落盘：
+- main/  保存主选论文（recent + most_cited）
+- ref1/  保存这些主选论文的参考文献（references）
+- cited/  保存这些主选论文的被引文献（citations）
+
+输入 mid.txt 支持两种格式：
+1) JSON：
+{
+  "张三": {"recent": ["10.x/..", ...], "cited": ["10.y/..", ...]},
+  "李四": {"recent": [...], "cited": [...]}
+}
+2) 纯文本块：
+teacher: 张三
+recent: 10.x/.., 10.y/..
+cited:  10.a/.., 10.b/..
+
+teacher: 李四
+recent: ...
+cited:  ...
+
+用法示例：
+  python batch_from_mid.py --mid-file pre-process/mid.txt --k 5 --data-root ./data
+  python batch_from_mid.py --mid-file pre-process/mid.txt --teacher 张三 --k 3 -o ./data
+
+说明：
+- 年轻作者相关字段由 doi_downloader 里的逻辑计算并写入每条条目（items 元数据），本脚本直接复用。
+- 若需仅索引相关文献而不下载，可加 --no-related-downloads。
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+import configparser
+import random
+
+# 简易进度打印（避免外部依赖问题）
+def progress_iter(items: List[str], desc: str, unit: str = "item"):
+    total = len(items)
+    if total == 0:
+        return
+    print(f"{desc}: 0/{total} {unit}s")
+    for idx, it in enumerate(items, 1):
+        yield it
+        print(f"{desc}: {idx}/{total} {unit}s")
+
+# 路径设置：确保可以导入 inspirehep_source/main 包
+import sys
+CUR_DIR = Path(__file__).resolve().parent
+# 仓库根目录（Check-Mentor）
+PROJ_ROOT = CUR_DIR.parents[2]
+# 源码根目录（inspirehep_source）
+SRC_ROOT = PROJ_ROOT / 'inspirehep_source'
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
+
+"""
+动态加载 InspireHEPClient：
+优先从 inspirehep_source/main/client.py 加载；若不存在，则回退到
+inspirehep_source/inspirehep_downloader/inspirehep_downloader/client.py。
+"""
+import importlib.util as iu
+
+# 首选：仓库旧结构（main/client.py）
+client_cls = None
+MAIN_CLIENT_PATH = SRC_ROOT / 'main' / 'client.py'
+if MAIN_CLIENT_PATH.exists():
+    _spec_client = iu.spec_from_file_location('ih_main_client_mod', str(MAIN_CLIENT_PATH))
+    if _spec_client and _spec_client.loader:
+        _mod_client = iu.module_from_spec(_spec_client)
+        _spec_client.loader.exec_module(_mod_client)  # type: ignore
+        client_cls = getattr(_mod_client, 'InspireHEPClient', None)
+
+# 回退：新结构（inspirehep_downloader/inspirehep_downloader/client.py）
+if client_cls is None:
+    ALT_CLIENT_PATH = SRC_ROOT / 'inspirehep_downloader' / 'inspirehep_downloader' / 'client.py'
+    _spec_client2 = iu.spec_from_file_location('ih_pkg_client_mod', str(ALT_CLIENT_PATH))
+    if _spec_client2 and _spec_client2.loader:
+        _mod_client2 = iu.module_from_spec(_spec_client2)
+        _spec_client2.loader.exec_module(_mod_client2)  # type: ignore
+        client_cls = getattr(_mod_client2, 'InspireHEPClient', None)
+
+if client_cls is None:
+    raise RuntimeError('无法加载 InspireHEPClient：请确认存在 main/client.py 或 inspirehep_downloader/inspirehep_downloader/client.py')
+
+InspireHEPClient = client_cls  # type: ignore
+
+# 直接导入同目录的 doi_downloader 辅助函数
+from doi_downloader import (
+    process_one_by_doi,
+    process_one_by_record_id_using_url,
+    get_young_author_years,
+    fetch_related_ids,
+    dir_name_from_metadata,
+)
+
+
+def parse_mid_file(mid_path: Path) -> Dict[str, Dict[str, List[str]]]:
+    """解析 mid.txt 为 {teacher: {recent: [doi...], cited: [doi...]}}"""
+    text = mid_path.read_text(encoding='utf-8').strip()
+    # 优先尝试 JSON
+    if text.startswith('{'):
+        try:
+            obj = json.loads(text)
+            result: Dict[str, Dict[str, List[str]]] = {}
+            for teacher, payload in obj.items():
+                recent = list(payload.get('recent', []) or [])
+                cited = list(payload.get('cited', []) or payload.get('most_cited', []) or [])
+                result[str(teacher)] = {
+                    'recent': [str(d).strip() for d in recent if str(d).strip()],
+                    'cited': [str(d).strip() for d in cited if str(d).strip()],
+                }
+            return result
+        except Exception:
+            pass
+    # 退化为纯文本块解析
+    result: Dict[str, Dict[str, List[str]]] = {}
+    teacher: Optional[str] = None
+    recent: List[str] = []
+    cited: List[str] = []
+    def _commit():
+        nonlocal teacher, recent, cited
+        if teacher:
+            result[teacher] = {
+                'recent': [d for d in recent if d],
+                'cited': [d for d in cited if d],
+            }
+        teacher, recent, cited = None, [], []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            _commit()
+            continue
+        if line.lower().startswith('teacher:') or line.startswith('教师:'):
+            _commit()
+            teacher = line.split(':', 1)[1].strip()
+        elif line.lower().startswith('recent:'):
+            part = line.split(':', 1)[1]
+            recent = [p.strip() for p in part.split(',') if p.strip()]
+        elif line.lower().startswith('cited:') or line.lower().startswith('most_cited:'):
+            part = line.split(':', 1)[1]
+            cited = [p.strip() for p in part.split(',') if p.strip()]
+        else:
+            # 兼容：若行是 DOI 列表（无键名），追加到 recent
+            if any(ch in line for ch in ['10.', '/']):
+                recent.extend([p.strip() for p in line.split(',') if p.strip()])
+    return result
+
+
+def ensure_dir(p: Path) -> None:
+    p.mkdir(parents=True, exist_ok=True)
+
+
+def get_default_k(config_path: Optional[Path] = None) -> Optional[int]:
+    """从 config.ini 读取 [batch] k_per_list，未配置则返回 None。"""
+    if config_path is None:
+        config_path = PROJ_ROOT / 'config.ini'
+    try:
+        if config_path.exists():
+            cp = configparser.ConfigParser()
+            cp.read(config_path, encoding='utf-8')
+            if cp.has_section('batch') and cp.has_option('batch', 'k_per_list'):
+                raw = cp.get('batch', 'k_per_list').strip()
+                if raw.isdigit():
+                    return int(raw)
+    except Exception:
+        # 配置读取失败则回退为 None
+        pass
+    return None
+
+
+def get_sampling_cfg(config_path: Optional[Path] = None) -> Tuple[Optional[int], Optional[int]]:
+    """读取采样配置（当 refs/cited 数量超过 n 时，随机抽样 m 篇）。
+
+    来自 config.ini 的 [download] 段：
+      - sample_threshold: 超过该数量才启用抽样（n）
+      - sample_size: 抽样数量（m）
+
+    若缺失或无效，返回 (None, None) 表示不启用抽样。
+    """
+    if config_path is None:
+        config_path = PROJ_ROOT / 'config.ini'
+    try:
+        if config_path.exists():
+            cp = configparser.ConfigParser()
+            cp.read(config_path, encoding='utf-8')
+            if cp.has_section('download'):
+                n_raw = cp.get('download', 'sample_threshold', fallback='').strip()
+                m_raw = cp.get('download', 'sample_size', fallback='').strip()
+                n_val: Optional[int] = int(n_raw) if n_raw.isdigit() else None
+                m_val: Optional[int] = int(m_raw) if m_raw.isdigit() else None
+                # 合法性检查
+                if (n_val is not None and n_val <= 0) or (m_val is not None and m_val <= 0):
+                    return None, None
+                return n_val, m_val
+    except Exception:
+        pass
+    return None, None
+
+
+def download_for_teacher(client: InspireHEPClient, teacher: str, recent_dois: List[str], cited_dois: List[str], k: Optional[int], data_root: Path, no_related_downloads: bool, verbose: bool = False) -> None:
+    base = data_root / teacher
+    main_dir = base / 'main'
+    ref1_dir = base / 'ref1'
+    cited_dir = base / 'cited'
+    ensure_dir(main_dir)
+    ensure_dir(ref1_dir)
+    ensure_dir(cited_dir)
+
+    years_window = get_young_author_years()
+    def printv(*a, **kw):
+        if verbose:
+            print(*a, **kw)
+
+    # 读取一次采样配置
+    sample_threshold, sample_size = get_sampling_cfg()
+
+    def maybe_sample(ids: List[str], label: str) -> List[str]:
+        """当 ids 数量超过阈值时，对其进行随机抽样。
+
+        - label: 用于日志（refs/cited）
+        """
+        if sample_threshold is None or sample_size is None:
+            return ids
+        if len(ids) > sample_threshold:
+            k = min(len(ids), sample_size)
+            # 不改变原列表顺序的前提下进行随机抽取：先复制索引抽样，再保持原顺序
+            indices = list(range(len(ids)))
+            random.shuffle(indices)
+            chosen = set(indices[:k])
+            picked = [x for i, x in enumerate(ids) if i in chosen]
+            printv(f"[{{teacher}}]   {label}: {len(ids)} 超过阈值 {sample_threshold}，随机抽样 {len(picked)} 篇进行处理")
+            return picked
+        return ids
+
+    def handle_one_doi(doi: str):
+        printv(f"[{teacher}] ▶ main DOI: {doi}")
+        hit = client.find_record_by_doi(doi)
+        if not hit:
+            print(f"未找到 DOI={doi} 对应记录，跳过")
+            return
+        rid = str(hit.get('id'))
+        # 主文献输出目录：按 DOI 命名
+        out_dir = main_dir / (doi.replace('/', '_'))
+        item = process_one_by_doi(client, doi, str(out_dir), download=True, years_window=years_window)
+        printv(f"[{teacher}] ✓ main saved at {out_dir}")
+        # 参考文献 → ref1（目录名优先 DOI/arXiv）
+        ref_ids = fetch_related_ids(client, rid, kind="references", limit=1000)
+        ref_ids = maybe_sample(ref_ids, label="refs")
+        printv(f"[{teacher}]   refs total = {len(ref_ids)}")
+        for idx, rr in enumerate(ref_ids, 1):
+            try:
+                md_norm = client.get_metadata(rr)
+                name = dir_name_from_metadata(md_norm)
+                printv(f"[{teacher}]   refs {idx}/{len(ref_ids)} -> id={rr} dir={name}")
+                process_one_by_record_id_using_url(client, rr, str(ref1_dir / name), download=not no_related_downloads, years_window=years_window)
+            except Exception as e:
+                print(f"参考文献 {rr} 处理失败: {e}")
+        # 被引文献 → cited（目录名优先 DOI/arXiv）
+        cit_ids = fetch_related_ids(client, rid, kind="citations", limit=1000)
+        cit_ids = maybe_sample(cit_ids, label="cited")
+        printv(f"[{teacher}]   cited total = {len(cit_ids)}")
+        for idx, cc in enumerate(cit_ids, 1):
+            try:
+                md_norm = client.get_metadata(cc)
+                name = dir_name_from_metadata(md_norm)
+                printv(f"[{teacher}]   cited {idx}/{len(cit_ids)} -> id={cc} dir={name}")
+                process_one_by_record_id_using_url(client, cc, str(cited_dir / name), download=not no_related_downloads, years_window=years_window)
+            except Exception as e:
+                print(f"被引文献 {cc} 处理失败: {e}")
+
+    # helper: 根据 k 选择子集
+    def take_k(items: List[str]) -> List[str]:
+        if k is None:
+            return items
+        return items[: max(0, min(len(items), k))]
+
+    # recent with progress
+    recent_slice = take_k(recent_dois)
+    if recent_slice:
+        for d in progress_iter(recent_slice, desc=f"{teacher} recent", unit="paper"):
+            handle_one_doi(d)
+
+    # most cited with progress
+    cited_slice = take_k(cited_dois)
+    if cited_slice:
+        for d in progress_iter(cited_slice, desc=f"{teacher} cited", unit="paper"):
+            handle_one_doi(d)
+
+
+def main():
+    ap = argparse.ArgumentParser(description='根据 mid.txt 批量下载老师的最近/高被引论文，并同步其引用与被引到 ref1/cited')
+    ap.add_argument('--mid-file', required=True, help='pre-process/mid.txt 路径，支持 JSON 或文本块格式')
+    ap.add_argument('--teacher', default=None, help='仅处理该老师（可选）')
+    ap.add_argument('--k', type=int, default=None, help='每个列表最多处理前 K 篇（可选，默认读取 config.ini [batch] k_per_list）')
+    ap.add_argument('-o', '--data-root', default=str(PROJ_ROOT / 'data'), help='data 根目录，默认项目根下的 data')
+    ap.add_argument('--no-related-downloads', action='store_true', help='仅索引相关文献，不下载其 PDF/元数据')
+    ap.add_argument('--verbose', action='store_true', help='详细显示处理进度（主文献/refs/cited 的逐条信息）')
+    args = ap.parse_args()
+
+    mid_path = Path(args.mid_file)
+    if not mid_path.exists():
+        raise FileNotFoundError(f"mid 文件不存在: {mid_path}")
+
+    plan = parse_mid_file(mid_path)
+    if not plan:
+        print('mid 文件未解析出任何老师/DOI，已退出')
+        return 0
+
+    data_root = Path(args.data_root)
+    ensure_dir(data_root)
+
+    client = InspireHEPClient()
+    # 若未提供 --k，读取 config.ini 的默认值
+    if args.k is None:
+        args.k = get_default_k()
+    for teacher, items in plan.items():
+        if args.teacher and teacher != args.teacher:
+            continue
+        recents = items.get('recent', [])
+        citeds = items.get('cited', [])
+        print(f"\n=== 处理老师: {teacher} | recent={len(recents)} | cited={len(citeds)} ===")
+        download_for_teacher(client, teacher, recents, citeds, args.k, data_root, args.no_related_downloads, verbose=args.verbose)
+
+    print('\n✓ 处理完成')
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

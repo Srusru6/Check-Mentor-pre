@@ -191,14 +191,14 @@ Downloads_pdf/
 
 ## PDF → Markdown 转换（pdf2md）
 
-本仓库提供了批量将 PDF 转为 Markdown 的脚本，已合并至当前模块：`DOIdownloader/pdf2md.py`，推荐通过统一入口调用：
+本仓库提供了批量将 PDF 转为 Markdown 的脚本，现已迁移至：`tools/pdf2md/pdf2md.py`，推荐通过统一入口调用：
 
 ```powershell
 # 推荐：通过 main.py 调用（会将结果输出到 data/<教师> 下）
 python .\main.py pdf2md --teacher "示例老师" --pdf-root .\Downloads_pdf --md-root .\data --subdirs main,ref1,cited --token $env:MINERU_TOKEN
 
 # 或直接调用脚本（默认 pdf-root=../Downloads_pdf, md-root=../data）
-python .\DOIdownloader\pdf2md.py --teacher "示例老师" --subdirs main,ref1,cited --token $env:MINERU_TOKEN
+python .\tools\pdf2md\pdf2md.py --teacher "示例老师" --subdirs main,ref1,cited --token $env:MINERU_TOKEN
 ```
 
 说明与默认行为：
@@ -214,7 +214,7 @@ python .\DOIdownloader\pdf2md.py --teacher "示例老师" --subdirs main,ref1,ci
 
 可用参数（直接调用脚本时）：
 ```text
-python DOIdownloader/pdf2md.py \
+python tools/pdf2md/pdf2md.py \
 	--teacher NAME \
 	[--pdf-root PATH] [--md-root PATH] \
 	[--token TOKEN] [--subdirs main,ref1,cited] [--limit N]

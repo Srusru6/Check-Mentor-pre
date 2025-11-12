@@ -62,7 +62,9 @@ def cmd_download(ns: argparse.Namespace) -> int:
 
 def cmd_pdf2md(ns: argparse.Namespace) -> int:
     repo = Path(__file__).resolve().parent
-    script = repo / 'DOIdownloader' / 'pdf2md.py'
+    # 新位置：tools/pdf2md/pdf2md.py（若不存在则回退到旧位置 DOI_source/pdf2md.py）
+    candidate_new = repo / 'tools' / 'pdf2md' / 'pdf2md.py'
+    script = candidate_new if candidate_new.exists() else (repo / 'DOI_source' / 'pdf2md.py')
     argv = ['--teacher', ns.teacher]
     if ns.pdf_root:
         argv += ['--pdf-root', ns.pdf_root]
@@ -79,7 +81,8 @@ def cmd_pdf2md(ns: argparse.Namespace) -> int:
 
 def cmd_merge_history(ns: argparse.Namespace) -> int:
     repo = Path(__file__).resolve().parent
-    script = repo / 'DOIdownloader' / 'merge_history_to_md.py'
+    # 修正路径：文件实际位于 DOI_source/merge_history_to_md.py
+    script = repo / 'DOI_source' / 'merge_history_to_md.py'
     argv = ['--teacher', ns.teacher]
     if ns.subdir:
         argv += ['--subdir', ns.subdir]
