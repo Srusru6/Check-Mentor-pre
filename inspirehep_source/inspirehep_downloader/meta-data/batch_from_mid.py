@@ -38,6 +38,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 import configparser
 import random
+import concurrent.futures as futures
 
 # 简易进度打印（避免外部依赖问题）
 def progress_iter(items: List[str], desc: str, unit: str = "item"):
@@ -203,6 +204,32 @@ def get_sampling_cfg(config_path: Optional[Path] = None) -> Tuple[Optional[int],
     return None, None
 
 
+def get_worker_cfg(config_path: Optional[Path] = None) -> Tuple[int, int]:
+    """读取并发配置，返回 (workers_main, workers_related)。
+
+    来自 config.ini 的 [download] 段：
+      - workers_main: 处理主文献 DOI 的并发度（默认 4）
+      - workers_related: 处理 refs/cited 的并发度（默认 6）
+    """
+    if config_path is None:
+        config_path = PROJ_ROOT / 'config.ini'
+    wm, wr = 4, 6
+    try:
+        if config_path.exists():
+            cp = configparser.ConfigParser()
+            cp.read(config_path, encoding='utf-8')
+            if cp.has_section('download'):
+                wmr = cp.get('download', 'workers_main', fallback='').strip()
+                wrr = cp.get('download', 'workers_related', fallback='').strip()
+                if wmr.isdigit():
+                    wm = max(1, int(wmr))
+                if wrr.isdigit():
+                    wr = max(1, int(wrr))
+    except Exception:
+        pass
+    return wm, wr
+
+
 def download_for_teacher(client: InspireHEPClient, teacher: str, recent_dois: List[str], cited_dois: List[str], k: Optional[int], data_root: Path, no_related_downloads: bool, verbose: bool = False) -> None:
     base = data_root / teacher
     main_dir = base / 'main'
@@ -217,8 +244,18 @@ def download_for_teacher(client: InspireHEPClient, teacher: str, recent_dois: Li
         if verbose:
             print(*a, **kw)
 
+    def has_any_metadata_json(dir_path: Path) -> bool:
+        try:
+            if not dir_path.exists() or not dir_path.is_dir():
+                return False
+            # 任意 *_metadata.json 即视为已完成
+            return any(dir_path.glob("*_metadata.json"))
+        except Exception:
+            return False
+
     # 读取一次采样配置
     sample_threshold, sample_size = get_sampling_cfg()
+    workers_main, workers_related = get_worker_cfg()
 
     def maybe_sample(ids: List[str], label: str) -> List[str]:
         """当 ids 数量超过阈值时，对其进行随机抽样。
@@ -247,32 +284,53 @@ def download_for_teacher(client: InspireHEPClient, teacher: str, recent_dois: Li
         rid = str(hit.get('id'))
         # 主文献输出目录：按 DOI 命名
         out_dir = main_dir / (doi.replace('/', '_'))
-        item = process_one_by_doi(client, doi, str(out_dir), download=True, years_window=years_window)
-        printv(f"[{teacher}] ✓ main saved at {out_dir}")
+        if has_any_metadata_json(out_dir):
+            printv(f"[{teacher}] ↷ 跳过 main（已存在）: {out_dir}")
+        else:
+            item = process_one_by_doi(client, doi, str(out_dir), download=True, years_window=years_window)
+            printv(f"[{teacher}] ✓ main saved at {out_dir}")
         # 参考文献 → ref1（目录名优先 DOI/arXiv）
         ref_ids = fetch_related_ids(client, rid, kind="references", limit=1000)
         ref_ids = maybe_sample(ref_ids, label="refs")
-        printv(f"[{teacher}]   refs total = {len(ref_ids)}")
-        for idx, rr in enumerate(ref_ids, 1):
+        printv(f"[{teacher}]   refs total = {len(ref_ids)} (并发 {workers_related})")
+
+        def _handle_ref(rr: str, idx: int):
             try:
                 md_norm = client.get_metadata(rr)
                 name = dir_name_from_metadata(md_norm)
+                target = ref1_dir / name
+                if has_any_metadata_json(target):
+                    printv(f"[{teacher}]   refs {idx}/{len(ref_ids)} -> 跳过（已存在） dir={name}")
+                    return
                 printv(f"[{teacher}]   refs {idx}/{len(ref_ids)} -> id={rr} dir={name}")
-                process_one_by_record_id_using_url(client, rr, str(ref1_dir / name), download=not no_related_downloads, years_window=years_window)
+                process_one_by_record_id_using_url(client, rr, str(target), download=not no_related_downloads, years_window=years_window)
             except Exception as e:
                 print(f"参考文献 {rr} 处理失败: {e}")
+
+        if ref_ids:
+            with futures.ThreadPoolExecutor(max_workers=workers_related) as pool:
+                list(pool.map(lambda t: _handle_ref(t[1], t[0]), enumerate(ref_ids, 1)))
         # 被引文献 → cited（目录名优先 DOI/arXiv）
         cit_ids = fetch_related_ids(client, rid, kind="citations", limit=1000)
         cit_ids = maybe_sample(cit_ids, label="cited")
-        printv(f"[{teacher}]   cited total = {len(cit_ids)}")
-        for idx, cc in enumerate(cit_ids, 1):
+        printv(f"[{teacher}]   cited total = {len(cit_ids)} (并发 {workers_related})")
+
+        def _handle_cit(cc: str, idx: int):
             try:
                 md_norm = client.get_metadata(cc)
                 name = dir_name_from_metadata(md_norm)
+                target = cited_dir / name
+                if has_any_metadata_json(target):
+                    printv(f"[{teacher}]   cited {idx}/{len(cit_ids)} -> 跳过（已存在） dir={name}")
+                    return
                 printv(f"[{teacher}]   cited {idx}/{len(cit_ids)} -> id={cc} dir={name}")
-                process_one_by_record_id_using_url(client, cc, str(cited_dir / name), download=not no_related_downloads, years_window=years_window)
+                process_one_by_record_id_using_url(client, cc, str(target), download=not no_related_downloads, years_window=years_window)
             except Exception as e:
                 print(f"被引文献 {cc} 处理失败: {e}")
+
+        if cit_ids:
+            with futures.ThreadPoolExecutor(max_workers=workers_related) as pool:
+                list(pool.map(lambda t: _handle_cit(t[1], t[0]), enumerate(cit_ids, 1)))
 
     # helper: 根据 k 选择子集
     def take_k(items: List[str]) -> List[str]:
@@ -280,17 +338,19 @@ def download_for_teacher(client: InspireHEPClient, teacher: str, recent_dois: Li
             return items
         return items[: max(0, min(len(items), k))]
 
-    # recent with progress
+    # recent & cited with concurrency
     recent_slice = take_k(recent_dois)
-    if recent_slice:
-        for d in progress_iter(recent_slice, desc=f"{teacher} recent", unit="paper"):
-            handle_one_doi(d)
-
-    # most cited with progress
     cited_slice = take_k(cited_dois)
-    if cited_slice:
-        for d in progress_iter(cited_slice, desc=f"{teacher} cited", unit="paper"):
-            handle_one_doi(d)
+
+    def _run_batch(items: List[str], label: str):
+        if not items:
+            return
+        printv(f"[{teacher}] 开始处理 {label}: {len(items)} 篇（并发 {workers_main}）")
+        with futures.ThreadPoolExecutor(max_workers=workers_main) as pool:
+            list(pool.map(handle_one_doi, items))
+
+    _run_batch(recent_slice, 'recent')
+    _run_batch(cited_slice, 'cited')
 
 
 def main():
