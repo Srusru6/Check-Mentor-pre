@@ -1,0 +1,306 @@
+##此为中间层数据
+曹庆宏
+时间排序：
+
+@article{Cao:2025fla,
+    author = "Cao, Qing-Hong and Ding, Jian-Nan and Liu, Yandong and Yuan, Jin-Long",
+    title = "{Probing CP Violation through Vector Boson Fusion at High-Energy Muon Colliders}",
+    eprint = "2510.23257",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    month = "10",
+    year = "2025"
+}
+
+@article{Song:2025odk,
+    author = "Song, Zhuo-Yang and others",
+    title = "{Iterated Agent for Symbolic Regression}",
+    eprint = "2510.08317",
+    archivePrefix = "arXiv",
+    primaryClass = "physics.comp-ph",
+    month = "10",
+    year = "2025"
+}
+
+@article{Chen:2025thj,
+    author = "Chen, C. and others",
+    title = "{Indirect measurement of the astrophysical reaction rates of N15(p,{\ensuremath{\gamma}})O16}",
+    doi = "10.1103/rvss-98yr",
+    journal = "Phys. Rev. C",
+    volume = "112",
+    number = "4",
+    pages = "045802",
+    year = "2025"
+}
+
+@article{CEPCStudyGroup:2025kmw,
+    author = "Adhya, Souvik Priyam and others",
+    collaboration = "CEPC Study Group",
+    title = "{CEPC Technical Design Report - Reference Detector}",
+    eprint = "2510.05260",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ex",
+    reportNumber = "IHEP-CEPC-DR-2025-01, IHEP-EP-2025-01",
+    month = "10",
+    year = "2025"
+}
+
+@article{Cao:2025icu,
+    author = "Cao, Qing-Hong and Yu, Zhite and Yuan, C. -P. and Zhang, Shutao and Zhu, Hua Xing",
+    title = "{Collins-type fragmentation energy correlator in semi-inclusive deep inelastic lepton-hadron scattering}",
+    eprint = "2509.18892",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    reportNumber = "JLAB-THY-25-4544",
+    month = "9",
+    year = "2025"
+}
+
+@article{Cao:2025qua,
+    author = "Cao, Qing-Hong and Li, Guanghui and Wen, Xin-Kai and Yan, Bin",
+    title = "{Probing Quark Electromagnetic Properties via Entangled Quark Pairs in Fragmentation Hadrons at Lepton Colliders}",
+    eprint = "2509.18276",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    reportNumber = "CPTNP-2025-035",
+    month = "9",
+    year = "2025"
+}
+
+@article{Cao:2025ync,
+    author = "Cao, Qingyun and Genov, Genko T. and Chu, Yaoming and Cai, Jianming and Liu, Yu and Retzker, Alex and Jelezko, Fedor",
+    title = "{Overcoming frequency resolution limits using a solid-state spin quantum sensor}",
+    eprint = "2506.20416",
+    archivePrefix = "arXiv",
+    primaryClass = "quant-ph",
+    month = "6",
+    year = "2025"
+}
+
+@article{Wang:2025xlg,
+    author = "Wang, Jun-Chen and Cao, Shunshun and Jiang, Jinchen and Liu, Yandong and Cao, Qing-Hong and Shao, Lijing",
+    title = "{First Constraint on Axion-Photon Coupling $g_{\gamma}$ from Neutron Star Observations}",
+    eprint = "2506.07546",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    month = "6",
+    year = "2025"
+}
+
+@article{Cao:2025jwb,
+    author = "Cao, Qing-Hong and Tanaka, Masanori and Wang, Jun-Chen and Xie, Ke-Pan and Zhang, Jing-Jun",
+    title = "{Can we live in a baby universe formed by a delayed first-order phase transition?}",
+    eprint = "2505.23007",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    reportNumber = "CPTNP-2025-014",
+    month = "5",
+    year = "2025"
+}
+
+@article{Cao:2025shc,
+    author = "Cao, Qing-Hong and Hou, Zong-Yue and Li, Ying-Ying and Liu, Xiaohui and Song, Zhuo-Yang and Zhang, Liang-Qi and Zhang, Shutao and Zhao, Ke",
+    title = "{Quantum State Preparation via Large-Language-Model-Driven Evolution}",
+    eprint = "2505.06347",
+    archivePrefix = "arXiv",
+    primaryClass = "quant-ph",
+    reportNumber = "CPTNP-25-0001",
+    month = "5",
+    year = "2025"
+}
+
+@article{Song:2025pwy,
+    author = "Song, Zhuo-Yang and Yang, Tong-Zhi and Cao, Qing-Hong and Luo, Ming-xing and Zhu, Hua Xing",
+    title = "{Explainable AI-assisted Optimization for Feynman Integral Reduction}",
+    eprint = "2502.09544",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    reportNumber = "ZU-TH 07/25",
+    month = "2",
+    year = "2025"
+}
+
+@article{Cao:2024vfc,
+    author = "Cao, Qing-Hong and Liu, Yandong and Yuan, Shu-Run",
+    title = "{Unitarity bounds and basis transformations in SMEFT: An analysis of Warsaw and SILH bases}",
+    doi = "10.1016/j.nuclphysb.2024.116781",
+    journal = "Nucl. Phys. B",
+    volume = "1010",
+    pages = "116781",
+    year = "2025"
+}
+
+引用排序：
+
+@article{Nadolsky:2008zw,
+    author = "Nadolsky, Pavel M. and Lai, Hung-Liang and Cao, Qing-Hong and Huston, Joey and Pumplin, Jon and Stump, Daniel and Tung, Wu-Ki and Yuan, C. -P.",
+    title = "{Implications of CTEQ global analysis for collider observables}",
+    eprint = "0802.0007",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    reportNumber = "MSUHEP-080125, UCRHEP-T447",
+    doi = "10.1103/PhysRevD.78.013004",
+    journal = "Phys. Rev. D",
+    volume = "78",
+    pages = "013004",
+    year = "2008"
+}
+
+@article{CEPCStudyGroup:2018ghi,
+    author = "Dong, Mingyi and others",
+    editor = "Guimar{\~a}es da Costa, Jo{\~a}o Barreiro and others",
+    collaboration = "CEPC Study Group",
+    title = "{CEPC Conceptual Design Report: Volume 2 - Physics {\&} Detector}",
+    eprint = "1811.10545",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ex",
+    reportNumber = "IHEP-CEPC-DR-2018-02, IHEP-EP-2018-01, IHEP-TH-2018-01",
+    month = "11",
+    year = "2018"
+}
+
+@article{Cao:2007rm,
+    author = "Cao, Qing-Hong and Ma, Ernest and Rajasekaran, G.",
+    title = "{Observing the Dark Scalar Doublet and its Impact on the Standard-Model Higgs Boson at Colliders}",
+    eprint = "0708.2939",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    reportNumber = "UCRHEP-T437",
+    doi = "10.1103/PhysRevD.76.095011",
+    journal = "Phys. Rev. D",
+    volume = "76",
+    pages = "095011",
+    year = "2007"
+}
+
+@article{Azzi:2019yne,
+    author = "Azzi, P. and others",
+    editor = "Dainese, Andrea and Mangano, Michelangelo and Meyer, Andreas B. and Nisati, Aleandro and Salam, Gavin and Vesterinen, Mika Anton",
+    title = "{Report from Working Group 1}: {Standard Model Physics at the HL-LHC and HE-LHC}",
+    eprint = "1902.04070",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    reportNumber = "CERN-LPCC-2018-03",
+    doi = "10.23731/CYRM-2019-007.1",
+    journal = "CERN Yellow Rep. Monogr.",
+    volume = "7",
+    pages = "1--220",
+    year = "2019"
+}
+
+@article{Azzi:2019yne,
+    author = "Azzi, P. and others",
+    editor = "Dainese, Andrea and Mangano, Michelangelo and Meyer, Andreas B. and Nisati, Aleandro and Salam, Gavin and Vesterinen, Mika Anton",
+    title = "{Report from Working Group 1}: {Standard Model Physics at the HL-LHC and HE-LHC}",
+    eprint = "1902.04070",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    reportNumber = "CERN-LPCC-2018-03",
+    doi = "10.23731/CYRM-2019-007.1",
+    journal = "CERN Yellow Rep. Monogr.",
+    volume = "7",
+    pages = "1--220",
+    year = "2019"
+}
+
+@article{Contino:2016spe,
+    author = "Contino, R. and others",
+    title = "{Physics at a 100 TeV pp collider: Higgs and EW symmetry breaking studies}",
+    eprint = "1606.09408",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    reportNumber = "CERN-TH-2016-113",
+    doi = "10.23731/CYRM-2017-003.255",
+    month = "6",
+    year = "2016"
+}
+
+@article{Cao:2009uw,
+    author = "Cao, Qing-Hong and Chen, Chuan-Ren and Li, Chong Sheng and Zhang, Hao",
+    title = "{Effective Dark Matter Model: Relic density, CDMS II, Fermi LAT and LHC}",
+    eprint = "0912.4511",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    reportNumber = "ANL-HEP-PR-09-107, EFI-09-31, IPMU09-0162",
+    doi = "10.1007/JHEP08(2011)018",
+    journal = "JHEP",
+    volume = "08",
+    pages = "018",
+    year = "2011"
+}
+
+@article{Achasov:2023gey,
+    author = "Achasov, M. and others",
+    title = "{STCF conceptual design report (Volume 1): Physics {\&} detector}",
+    eprint = "2303.15790",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ex",
+    doi = "10.1007/s11467-023-1333-z",
+    journal = "Front. Phys. (Beijing)",
+    volume = "19",
+    number = "1",
+    pages = "14701",
+    year = "2024"
+}
+
+@inproceedings{Buttar:2008jx,
+    author = "Buttar, C. and others",
+    title = "{Standard Model Handles and Candles Working Group: Tools and Jets Summary Report}",
+    booktitle = "{5th Les Houches Workshop on Physics at TeV Colliders}",
+    eprint = "0803.0678",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    pages = "121--214",
+    month = "3",
+    year = "2008"
+}
+
+@article{Cao:2010zb,
+    author = "Cao, Qing-Hong and McKeen, David and Rosner, Jonathan L. and Shaughnessy, Gabe and Wagner, Carlos E. M.",
+    title = "{Forward-Backward Asymmetry of Top Quark Pair Production}",
+    eprint = "1003.3461",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    reportNumber = "ANL-HEP-PR-09-113, EFI-09-37, NUHEP-TH-10-01",
+    doi = "10.1103/PhysRevD.81.114004",
+    journal = "Phys. Rev. D",
+    volume = "81",
+    pages = "114004",
+    year = "2010"
+}
+
+@article{Cao:2015pto,
+    author = "Cao, Qing-Hong and Liu, Yandong and Xie, Ke-Pan and Yan, Bin and Zhang, Dong-Ming",
+    title = "{A Boost Test of Anomalous Diphoton Resonance at the LHC}",
+    eprint = "1512.05542",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    month = "12",
+    year = "2015"
+}
+
+@article{Berger:2011ua,
+    author = "Berger, Edmond L. and Cao, Qing-Hong and Chen, Chuan-Ren and Li, Chong Sheng and Zhang, Hao",
+    title = "{Top Quark Forward-Backward Asymmetry and Same-Sign Top Quark Pairs}",
+    eprint = "1101.5625",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    reportNumber = "ANL-HEP-PR-11-09, IPMU11-0008",
+    doi = "10.1103/PhysRevLett.106.201801",
+    journal = "Phys. Rev. Lett.",
+    volume = "106",
+    pages = "201801",
+    year = "2011"
+}
+
+@article{Cao:2005pq,
+    author = "Cao, Qing-Hong and Schwienhorst, Reinhard and Benitez, Jorge A. and Brock, Raymond and Yuan, C. -P.",
+    title = "{Next-to-leading order corrections to single top quark production and decay at the Tevatron: 2. $t^-$ channel process}",
+    eprint = "hep-ph/0504230",
+    archivePrefix = "arXiv",
+    doi = "10.1103/PhysRevD.72.094027",
+    journal = "Phys. Rev. D",
+    volume = "72",
+    pages = "094027",
+    year = "2005"
+}
