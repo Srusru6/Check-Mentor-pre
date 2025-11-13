@@ -18,6 +18,7 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
 import configparser
 from pathlib import Path
+import concurrent.futures as futures
 
 # 处理包导入路径：将 inspirehep_source 加入 sys.path 以便导入下载器包
 import sys
@@ -28,6 +29,18 @@ PKG_ROOT = SRC_ROOT / 'inspirehep_downloader'
 for p in (SRC_ROOT, PKG_ROOT):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
+
+# 引入 DOI_source 的下载方法（publisher/Unpaywall/Sci-Hub）
+DOI_SRC_DIR = PROJ_ROOT / 'DOI_source'
+if str(DOI_SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(DOI_SRC_DIR))
+import importlib.util as iu2
+_dl_path = DOI_SRC_DIR / 'download.py'
+_spec_dl = iu2.spec_from_file_location('doi_source_download_mod', str(_dl_path))
+doi_src_mod = None
+if _spec_dl and _spec_dl.loader:
+    doi_src_mod = iu2.module_from_spec(_spec_dl)
+    _spec_dl.loader.exec_module(doi_src_mod)  # type: ignore
 
 # 从新版包结构导入：通过路径加载 client.py（其内部不含相对导入问题）
 import importlib.util as iu
@@ -157,6 +170,95 @@ def parse_year_month(pub_date: Any) -> Dict[str, int]:
     except Exception:
         pass
     return year_month
+
+
+# ---------------------------
+# 当缺少 PDF URL 时，使用 DOI_source 的方法回退获取
+# ---------------------------
+
+def _load_download_cfg(config_path: Optional[Path] = None) -> tuple[Optional[str], Optional[list[str]]]:
+    """从 config.ini 或环境变量读取 Unpaywall 邮箱与 Sci-Hub 域名列表。
+    环境变量优先：UNPAYWALL_EMAIL, SCIHUB_DOMAINS(逗号分隔)。
+    配置文件段 [download] 中可选键：unpaywall_email, scihub_domains
+    """
+    email = os.getenv('UNPAYWALL_EMAIL') or None
+    domains_env = os.getenv('SCIHUB_DOMAINS') or None
+    domains = [s.strip() for s in domains_env.split(',')] if domains_env else None
+    if config_path is None:
+        config_path = PROJ_ROOT / 'config.ini'
+    try:
+        if config_path.exists():
+            cp = configparser.ConfigParser()
+            cp.read(config_path, encoding='utf-8')
+            if not email:
+                email = cp.get('download', 'unpaywall_email', fallback='').strip() or None
+            if domains is None:
+                raw = cp.get('download', 'scihub_domains', fallback='').strip()
+                if raw:
+                    parts = [p.strip() for p in raw.split(',') if p.strip()]
+                    domains = parts or None
+    except Exception:
+        pass
+    return email, domains
+
+
+def _download_binary(url: str, output_path: str, timeout: int = 60) -> None:
+    """以流方式下载二进制文件到指定路径。"""
+    import requests
+    headers = getattr(doi_src_mod, 'DEFAULT_HEADERS', {
+        'User-Agent': 'Mozilla/5.0'
+    })
+    sess = getattr(doi_src_mod, 'session', requests.Session())
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with sess.get(url, headers=headers, timeout=timeout, stream=True) as r:
+        r.raise_for_status()
+        # 简单类型校验
+        ctype = (r.headers.get('Content-Type') or '').lower()
+        first = True
+        with open(output_path, 'wb') as f:
+            for chunk in r.iter_content(chunk_size=1024 * 256):
+                if not chunk:
+                    continue
+                if first:
+                    if (('pdf' not in ctype) and not chunk.startswith(b'%PDF')):
+                        raise ValueError(f'URL 不是 PDF 内容: {ctype}')
+                    first = False
+                f.write(chunk)
+
+
+def resolve_pdf_via_doi_source(doi: str) -> Optional[str]:
+    """使用 DOI_source 的三段式策略解析 PDF 直链。"""
+    if doi_src_mod is None:
+        return None
+    email, domains = _load_download_cfg()
+    # 1) Publisher
+    try:
+        get_pub = getattr(doi_src_mod, 'get_pdf_from_publisher', None)
+        if callable(get_pub):
+            url = get_pub(doi)
+            if url:
+                return url
+    except Exception:
+        pass
+    # 2) Unpaywall
+    try:
+        get_oa = getattr(doi_src_mod, 'get_pdf_from_unpaywall', None)
+        if callable(get_oa):
+            url = get_oa(doi, email)
+            if url:
+                return url
+    except Exception:
+        pass
+    # 3) Sci-Hub
+    try:
+        get_sh = getattr(doi_src_mod, 'GetDownloadUrl', None)
+        if callable(get_sh):
+            url = get_sh(doi, scihub_domains=domains)
+            if url:
+                return url
+    except Exception:
+        pass
+    return None
 
 
 def to_items_metadata(record_meta: Dict[str, Any], role: Optional[str] = None) -> Dict[str, Any]:
@@ -409,17 +511,36 @@ def process_one_by_doi(client: Any, doi: str, out_dir: str, download: bool = Tru
     # 目录名基于 DOI/ArXiv/rid
     # 注意：传入的 out_dir 已是目标目录；上层确保按 dir_name_from_metadata 命名
     # 下载 PDF（可选）
+    pdf_filename = f"{_sanitize_dir_name(doi)}.pdf"
+    pdf_path = os.path.join(out_dir, pdf_filename)
     if download:
         pdf_url = _pdf_url_from_inspire_metadata_raw(md_raw)
-        if pdf_url:
-            pdf_path = os.path.join(out_dir, f"{_sanitize_dir_name(doi)}.pdf")
+        if not pdf_url:
+            # 回退：使用 DOI_source 策略解析 PDF 直链
             try:
-                download_pdf_by_url(client, pdf_url, pdf_path)
+                pdf_url = resolve_pdf_via_doi_source(doi)
+            except Exception:
+                pdf_url = None
+        if pdf_url:
+            try:
+                # 优先走 client 下载（保持统一），若失败则直接 HTTP 下载
+                try:
+                    download_pdf_by_url(client, pdf_url, pdf_path)
+                except Exception:
+                    _download_binary(pdf_url, pdf_path)
             except Exception as e:
                 print(f"警告: 无法下载 PDF ({pdf_url}): {e}")
-    # 始终写 metadata json
-    with open(os.path.join(out_dir, f"{_sanitize_dir_name(doi)}_metadata.json"), 'w', encoding='utf-8') as f:
-        json.dump(meta_norm, f, ensure_ascii=False, indent=2)
+    # 仅在存在 PDF 时写入 metadata；否则删除残留的 metadata
+    meta_path = os.path.join(out_dir, f"{_sanitize_dir_name(doi)}_metadata.json")
+    if os.path.exists(pdf_path):
+        with open(meta_path, 'w', encoding='utf-8') as f:
+            json.dump(meta_norm, f, ensure_ascii=False, indent=2)
+    else:
+        try:
+            if os.path.exists(meta_path):
+                os.remove(meta_path)
+        except Exception:
+            pass
 
     # 年轻作者增强
     if years_window is None:
@@ -443,17 +564,36 @@ def process_one_by_record_id_using_url(client: Any, record_id: str, out_dir: str
     # 下载 PDF 优先 URL（documents/arXiv）
     if download:
         pdf_url = _pdf_url_from_inspire_metadata_raw(md_raw)
+        if not pdf_url:
+            # 若原始元数据无直链，尝试用 DOI 回退
+            doi = (item.get('doi') or meta_norm.get('doi')) if 'item' in locals() else meta_norm.get('doi')
+            if doi:
+                try:
+                    pdf_url = resolve_pdf_via_doi_source(doi)
+                except Exception:
+                    pdf_url = None
+        base_name = dir_name_from_metadata(meta_norm)
+        pdf_path = os.path.join(out_dir, f"{base_name}.pdf")
         if pdf_url:
-            base_name = dir_name_from_metadata(meta_norm)
-            pdf_path = os.path.join(out_dir, f"{base_name}.pdf")
             try:
-                download_pdf_by_url(client, pdf_url, pdf_path)
+                try:
+                    download_pdf_by_url(client, pdf_url, pdf_path)
+                except Exception:
+                    _download_binary(pdf_url, pdf_path)
             except Exception as e:
                 print(f"警告: 关联文献 PDF 下载失败 ({pdf_url}): {e}")
-    # 始终写元数据
+    # 仅在存在 PDF 时写元数据；否则删除残留的元数据
     base_name = dir_name_from_metadata(meta_norm)
-    with open(os.path.join(out_dir, f"{base_name}_metadata.json"), 'w', encoding='utf-8') as f:
-        json.dump(meta_norm, f, ensure_ascii=False, indent=2)
+    meta_path = os.path.join(out_dir, f"{base_name}_metadata.json")
+    if os.path.exists(pdf_path):
+        with open(meta_path, 'w', encoding='utf-8') as f:
+            json.dump(meta_norm, f, ensure_ascii=False, indent=2)
+    else:
+        try:
+            if os.path.exists(meta_path):
+                os.remove(meta_path)
+        except Exception:
+            pass
 
     # 年轻作者增强
     if years_window is None:
@@ -466,15 +606,120 @@ def process_one_by_record_id_using_url(client: Any, record_id: str, out_dir: str
     return item
 
 
+def _pdf_exists_for_metadata(meta_path: Path) -> bool:
+    """判断与 *_metadata.json 同名的 .pdf 是否已存在。"""
+    stem = meta_path.name[:-len("_metadata.json")] if meta_path.name.endswith("_metadata.json") else meta_path.stem
+    pdf_path = meta_path.parent / f"{stem}.pdf"
+    return pdf_path.exists()
+
+
+def _download_pdf_for_metadata(client: Any, meta_path: Path) -> Tuple[bool, str]:
+    """给定 *_metadata.json，尝试下载对应 PDF 到同目录。
+
+    返回 (success, message)。
+    """
+    try:
+        with open(meta_path, "r", encoding="utf-8") as f:
+            meta_norm = json.load(f)
+        # 解析 record_id；若无则尝试从 inspire_url 或 doi 推断
+        rid = meta_norm.get("record_id")
+        if not rid:
+            ins_url = meta_norm.get("inspire_url")
+            if isinstance(ins_url, str) and "/literature/" in ins_url:
+                rid = ins_url.rstrip("/").split("/")[-1]
+        if not rid:
+            doi = meta_norm.get("doi")
+            if doi:
+                hit = InspireHEPClient().find_record_by_doi(doi)
+                if hit:
+                    rid = str(hit.get("id"))
+        if not rid:
+            return False, "缺少 record_id/doi，无法定位记录"
+
+        # 获取原始 metadata 以提取 PDF URL
+        client2 = InspireHEPClient()
+        rec = client2.get_record(str(rid))
+        md_raw = rec.get("metadata", {}) or {}
+        url = _pdf_url_from_inspire_metadata_raw(md_raw)
+        if not url:
+            return False, "未找到 PDF URL"
+        # 输出文件名与目录
+        base = meta_path.name[:-len("_metadata.json")] if meta_path.name.endswith("_metadata.json") else meta_path.stem
+        out_pdf = meta_path.parent / f"{base}.pdf"
+        download_pdf_by_url(client2, url, str(out_pdf))
+        return True, f"下载完成: {out_pdf}"
+    except Exception as e:
+        return False, f"下载失败: {e}"
+
+
+def _walk_metadata_jsons(data_root: Path, teacher: str, subdirs: Optional[List[str]]) -> List[Path]:
+    t_root = data_root / teacher
+    found: List[Path] = []
+    if not t_root.exists():
+        return found
+    targets = subdirs or ["main", "ref1", "cited"]
+    for sd in targets:
+        base = t_root / sd
+        if not base.exists():
+            continue
+        # 递归查找 *_metadata.json
+        found.extend(base.rglob("*_metadata.json"))
+    return found
+
+
+def _run_from_data(args: argparse.Namespace) -> int:
+    data_root = Path(args.data_root).resolve()
+    teacher = args.teacher
+    subdirs = [s.strip() for s in (args.subdirs.split(",") if args.subdirs else []) if s.strip()] or None
+
+    metas = _walk_metadata_jsons(data_root, teacher, subdirs)
+    if not metas:
+        print(f"未在 {data_root / teacher} 下找到任何 *_metadata.json")
+        return 0
+
+    # 过滤已存在 PDF 的条目
+    pending = [m for m in metas if not _pdf_exists_for_metadata(m)]
+    print(f"共发现元数据 {len(metas)} 个；待下载 PDF {len(pending)} 个（并发 {args.workers}）")
+    if not pending:
+        return 0
+
+    def task(meta_path: Path) -> str:
+        ok, msg = _download_pdf_for_metadata(InspireHEPClient(), meta_path)
+        prefix = "✓" if ok else "✗"
+        return f"{prefix} {meta_path.parent.name}/{meta_path.name}: {msg}"
+
+    with futures.ThreadPoolExecutor(max_workers=args.workers) as pool:
+        for res in pool.map(task, pending):
+            print(res)
+    return 0
+
+
 def main():
-    parser = argparse.ArgumentParser(description="根据 DOI 下载论文及其相关文献（INSPIRE-HEP）")
-    parser.add_argument("--doi", required=True, help="论文 DOI，例如 10.1234/abc")
-    parser.add_argument("-o", "--output-dir", default=".", help="输出目录（默认当前目录）")
-    parser.add_argument("--related-limit", type=int, default=10, help="每类相关文献（被引/参考）的最大数量")
-    parser.add_argument("--no-related-downloads", action="store_true", help="不下载相关文献的 PDF/元数据，只做索引")
+    parser = argparse.ArgumentParser(description="根据 DOI 下载论文及其相关文献，或根据 data/<老师> 下的 *_metadata.json 批量补全 PDF（INSPIRE-HEP）")
+
+    mx = parser.add_mutually_exclusive_group(required=True)
+    mx.add_argument("--doi", help="论文 DOI，例如 10.1234/abc")
+    mx.add_argument("--from-data", action="store_true", help="根据 data/<老师> 下的 *_metadata.json 补齐缺失的 PDF")
+
+    parser.add_argument("-o", "--output-dir", default=".", help="输出目录（默认当前目录）；仅 --doi 模式使用")
+    parser.add_argument("--related-limit", type=int, default=10, help="每类相关文献（被引/参考）的最大数量；仅 --doi 模式使用")
+    parser.add_argument("--no-related-downloads", action="store_true", help="不下载相关文献的 PDF/元数据，只做索引；仅 --doi 模式使用")
+
+    # from-data 模式参数
+    parser.add_argument("--data-root", default=str(PROJ_ROOT / "data"), help="data 根目录（包含 <老师>/main|ref1|cited）")
+    parser.add_argument("--teacher", default=None, help="老师名（必填，用于 --from-data 模式）")
+    parser.add_argument("--subdirs", default=None, help="限定子目录，逗号分隔（如 main,ref1,cited）；不填则三者都扫")
+    parser.add_argument("--workers", type=int, default=6, help="并发下载 PDF 线程数（--from-data 模式）")
 
     args = parser.parse_args()
 
+    if args.from_data:
+        if not args.teacher:
+            print("--from-data 模式下必须提供 --teacher")
+            return 1
+        return _run_from_data(args)
+
+    # --doi 模式
     client = InspireHEPClient()
 
     # 1) 通过 DOI 定位记录

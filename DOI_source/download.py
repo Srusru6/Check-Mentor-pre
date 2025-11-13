@@ -104,7 +104,7 @@ def _ensure_history_loaded():
     global _history_cache
     if _history_cache is None:
         os.makedirs(OUTPUT_ROOT_PDF, exist_ok=True)
-        hp = _history_path()\
+        hp = _history_path()
         if os.path.exists(hp):
             try:
                 with open(hp, 'r', encoding='utf-8') as f:
@@ -1689,7 +1689,13 @@ if __name__ == "__main__":
     ONLY_REF1_AND_CITED = bool(getattr(args, 'only_ref1_cited', False))
     # Load config.ini defaults (if present) and possibly override with CLI
     cfg = configparser.ConfigParser()
-    cfg.read(os.path.join(os.getcwd(), 'config.ini'))
+    # Prefer UTF-8 to avoid Windows default cp936/gbk decoding issues
+    cfg_path = os.path.join(os.getcwd(), 'config.ini')
+    try:
+        cfg.read(cfg_path, encoding='utf-8')
+    except Exception:
+        # Fallback to default encoding if UTF-8 read fails
+        cfg.read(cfg_path)
     cfg_top_n = None
     cfg_top_n_main = None
     cfg_top_n_ref = None
