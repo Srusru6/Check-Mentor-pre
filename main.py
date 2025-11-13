@@ -121,6 +121,27 @@ def cmd_run_all(ns: argparse.Namespace) -> int:
     return cmd_analyze(argparse.Namespace(target=teacher, test_mode=ns.test_mode, data_root=str(Path(md_root) / teacher)))
 
 
+def cmd_meta_pack(ns: argparse.Namespace) -> int:
+    repo = Path(__file__).resolve().parent
+    script = repo / 'inspirehep_source' / 'inspirehep_downloader' / 'meta-data' / 'run_meta_pack.py'
+    argv = []
+    if ns.mid_file:
+        argv += ['--mid-file', ns.mid_file]
+    if ns.teacher:
+        argv += ['--teacher', ns.teacher]
+    if ns.dois:
+        argv += ['--dois', ns.dois]
+    if ns.data_root:
+        argv += ['-o', ns.data_root]
+    if ns.k is not None:
+        argv += ['--k', str(ns.k)]
+    if ns.no_related_downloads:
+        argv.append('--no-related-downloads')
+    if ns.verbose:
+        argv.append('--verbose')
+    return _run_py(script, argv)
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description='Check-Mentor 统一入口')
     sub = p.add_subparsers(dest='cmd', required=True)
@@ -170,6 +191,17 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument('--token', default=None, help='MinerU API Token（默认读环境变量 MINERU_TOKEN）')
     pr.add_argument('--limit', type=int, default=None, help='最多处理的文件数')
     pr.set_defaults(func=cmd_run_all)
+
+    # meta-pack
+    pm = sub.add_parser('meta-pack', help='基于 meta-data 脚本生成 DOI_source 风格的数据布局（data/<teacher>/main|ref1|cited）')
+    pm.add_argument('--mid-file', default=None, help='mid 文件路径（JSON 或文本块）')
+    pm.add_argument('--teacher', default=None, help='仅处理该老师（可选）')
+    pm.add_argument('--dois', default=None, help='逗号分隔的 DOI 列表（与 --teacher 一起使用）')
+    pm.add_argument('-o', '--data-root', default=None, help='data 根目录（默认 ./data）')
+    pm.add_argument('--k', type=int, default=None, help='每个列表最多处理前 K 篇（可选）')
+    pm.add_argument('--no-related-downloads', action='store_true', help='仅索引相关文献，不下载其 PDF/元数据')
+    pm.add_argument('--verbose', action='store_true', help='详细输出')
+    pm.set_defaults(func=cmd_meta_pack)
 
     return p
 
