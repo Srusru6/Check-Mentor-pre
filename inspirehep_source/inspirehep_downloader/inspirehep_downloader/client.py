@@ -3,6 +3,8 @@
 """
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from typing import Dict, List, Optional, Tuple
 import json
 
@@ -22,8 +24,19 @@ class InspireHEPClient:
         self.timeout = timeout
         self.session = requests.Session()
         self.session.headers.update({
-            "Accept": "application/json"
+            "Accept": "application/json",
+            "User-Agent": "CheckMentor-InspireHEP-Client/1.0 (+https://github.com/Srusru6/Check-Mentor)"
         })
+        # 提高连接池与重试策略，缓解并发与临时网络错误
+        retries = Retry(
+            total=3,
+            backoff_factor=0.5,
+            status_forcelist=(429, 500, 502, 503, 504),
+            allowed_methods=("GET", "HEAD")
+        )
+        adapter = HTTPAdapter(pool_connections=64, pool_maxsize=64, max_retries=retries)
+        self.session.mount("http://", adapter)
+        self.session.mount("https://", adapter)
     
     def search_literature(self, query: str, size: int = 10, page: int = 1) -> Dict:
         """

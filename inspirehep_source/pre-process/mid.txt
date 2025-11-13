@@ -269,3 +269,286 @@
     pages = "094027",
     year = "2005"
 }
+
+朱华星
+
+时间排序
+
+@article{He:2025hin,
+    author = "He, Chuan-Qi and Xing, Hongxi and Yang, Tong-Zhi and Zhu, Hua Xing",
+    title = "{Single-Inclusive Hadron Production in Electron-Positron Annihilation at Next-to-Next-to-Next-to-Leading Order in QCD}",
+    eprint = "2503.20441",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    reportNumber = "ZU-TH 21/25",
+    doi = "10.1103/vtz2-6bnm",
+    journal = "Phys. Rev. Lett.",
+    volume = "135",
+    number = "10",
+    pages = "101901",
+    year = "2025"
+}
+
+@article{Xu:2024rbt,
+    author = "Xu, Zhen and Zhu, Hua Xing",
+    title = "{Threshold resummation for semi-inclusive single-hadron production with effective field theory}",
+    eprint = "2411.11595",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    doi = "10.1007/JHEP06(2025)176",
+    journal = "JHEP",
+    volume = "06",
+    pages = "176",
+    year = "2025"
+}
+
+@article{Liu:2024lxy,
+    author = "Liu, Xiaohui and Vogelsang, Werner and Yuan, Feng and Zhu, Hua Xing",
+    title = "{Universality in the Near-Side Energy-Energy Correlator}",
+    eprint = "2410.16371",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    doi = "10.1103/PhysRevLett.134.151901",
+    journal = "Phys. Rev. Lett.",
+    volume = "134",
+    number = "15",
+    pages = "151901",
+    year = "2025"
+}
+
+@article{Jaarsma:2024ngl,
+    author = "Jaarsma, Max and Li, Yibei and Moult, Ian and Waalewijn, Wouter and Zhu, Hua Xing",
+    title = "{Energy-energy correlations on tracks: factorization and resummation}",
+    doi = "10.22323/1.467.0069",
+    journal = "PoS",
+    volume = "LL2024",
+    pages = "069",
+    year = "2024"
+}
+
+@article{Henn:2024qjq,
+    author = "Henn, Johannes and Ma, Rourou and Xu, Yongqun and Yan, Kai and Zhang, Yang and Zhu, Hua Xing",
+    title = "{Two-loop spacelike splitting amplitude for N=4 Super-Yang-Mills theory}",
+    eprint = "2406.14604",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-th",
+    reportNumber = "USTC-ICTS/PCFT-24-18",
+    doi = "10.1103/5qrc-4vq1",
+    journal = "Phys. Rev. D",
+    volume = "112",
+    number = "7",
+    pages = "076003",
+    year = "2025"
+}
+
+@article{Chen:2024nyc,
+    author = "Chen, Hao and Monni, Pier Francesco and Xu, Zhen and Zhu, Hua Xing",
+    title = "{Scaling Violation in Power Corrections to Energy Correlators from the Light-Ray Operator Product Expansion}",
+    eprint = "2406.06668",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    reportNumber = "CERN-TH-2024-084",
+    doi = "10.1103/PhysRevLett.133.231901",
+    journal = "Phys. Rev. Lett.",
+    volume = "133",
+    number = "23",
+    pages = "231901",
+    year = "2024"
+}
+
+@article{Guo:2024jch,
+    author = "Guo, Yuxun and Liu, Xiaohui and Yuan, Feng and Zhu, Hua Xing",
+    title = "{Long-Range Azimuthal Correlation, Entanglement, and Bell Inequality Violation by Spinning Gluons at the Large Hadron Collider}",
+    eprint = "2406.05880",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    doi = "10.34133/research.0552",
+    journal = "Research",
+    volume = "2025",
+    pages = "0552",
+    year = "2025"
+}
+
+@article{Gao:2023ivm,
+    author = "Gao, Anjie and Li, Hai Tao and Moult, Ian and Zhu, Hua Xing",
+    title = "{The transverse energy-energy correlator at next-to-next-to-next-to-leading logarithm}",
+    eprint = "2312.16408",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    reportNumber = "MIT-CTP 5662",
+    doi = "10.1007/JHEP09(2024)072",
+    journal = "JHEP",
+    volume = "09",
+    pages = "072",
+    year = "2024"
+}
+
+@article{Chen:2023amz,
+    author = "Chen, Hao and Zhou, Xinan and Zhu, Hua Xing",
+    title = "{Power corrections to EEC meets conformal bootstrap}",
+    doi = "10.22323/1.432.0061",
+    journal = "PoS",
+    volume = "RADCOR2023",
+    pages = "061",
+    year = "2024"
+}
+
+@article{Chen:2023hmk,
+    author = "Chen, Wen and Luo, Ming-xing and Yang, Tong-Zhi and Zhu, Hua Xing",
+    title = "{Soft theorem to three loops in QCD and $ \mathcal{N} $ = 4 super Yang-Mills theory}",
+    eprint = "2309.03832",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    reportNumber = "ZU-TH 51/23",
+    doi = "10.1007/JHEP01(2024)131",
+    journal = "JHEP",
+    volume = "01",
+    pages = "131",
+    year = "2024"
+}
+
+引用排序
+
+@article{Gao:2012ja,
+    author = "Gao, Jun and Li, Chong Sheng and Zhu, Hua Xing",
+    title = "{Top Quark Decay at Next-to-Next-to Leading Order in QCD}",
+    eprint = "1210.2808",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    reportNumber = "SLAC-PUB-15260",
+    doi = "10.1103/PhysRevLett.110.042001",
+    journal = "Phys. Rev. Lett.",
+    volume = "110",
+    number = "4",
+    pages = "042001",
+    year = "2013"
+}
+
+@article{Li:2016ctv,
+    author = "Li, Ye and Zhu, Hua Xing",
+    title = "{Bootstrapping Rapidity Anomalous Dimensions for Transverse-Momentum Resummation}",
+    eprint = "1604.01404",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    reportNumber = "FERMILAB-PUB-16-067-PPD-T, MIT-CTP-4796",
+    doi = "10.1103/PhysRevLett.118.022004",
+    journal = "Phys. Rev. Lett.",
+    volume = "118",
+    number = "2",
+    pages = "022004",
+    year = "2017"
+}
+
+@article{Chen:2020vvp,
+    author = "Chen, Hao and Moult, Ian and Zhang, XiaoYuan and Zhu, Hua Xing",
+    title = "{Rethinking jets with energy correlators: Tracks, resummation, and analytic continuation}",
+    eprint = "2004.11381",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    doi = "10.1103/PhysRevD.102.054012",
+    journal = "Phys. Rev. D",
+    volume = "102",
+    number = "5",
+    pages = "054012",
+    year = "2020"
+}
+
+@article{Dixon:2019uzg,
+    author = "Dixon, Lance J. and Moult, Ian and Zhu, Hua Xing",
+    title = "{Collinear limit of the energy-energy correlator}",
+    eprint = "1905.01310",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    reportNumber = "SLAC-PUB-17427, SLAC--PUB--17427",
+    doi = "10.1103/PhysRevD.100.014009",
+    journal = "Phys. Rev. D",
+    volume = "100",
+    number = "1",
+    pages = "014009",
+    year = "2019"
+}
+
+@article{Kelley:2011ng,
+    author = "Kelley, Randall and Schwartz, Matthew D. and Schabinger, Robert M. and Zhu, Hua Xing",
+    title = "{The two-loop hemisphere soft function}",
+    eprint = "1105.3676",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    doi = "10.1103/PhysRevD.84.045022",
+    journal = "Phys. Rev. D",
+    volume = "84",
+    pages = "045022",
+    year = "2011"
+}
+
+@article{Li:2016axz,
+    author = "Li, Ye and Neill, Duff and Zhu, Hua Xing",
+    title = "{An exponential regulator for rapidity divergences}",
+    eprint = "1604.00392",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    reportNumber = "FERMILAB-PUB-16-090-PPD-T, MIT-CTP-4795",
+    doi = "10.1016/j.nuclphysb.2020.115193",
+    journal = "Nucl. Phys. B",
+    volume = "960",
+    pages = "115193",
+    year = "2020"
+}
+
+@article{Moult:2016fqy,
+    author = "Moult, Ian and Rothen, Lorena and Stewart, Iain W. and Tackmann, Frank J. and Zhu, Hua Xing",
+    title = "{Subleading Power Corrections for N-Jettiness Subtractions}",
+    eprint = "1612.00450",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    reportNumber = "MIT-CTP-4855, DESY-16-229, MIT--CTP-4855",
+    doi = "10.1103/PhysRevD.95.074023",
+    journal = "Phys. Rev. D",
+    volume = "95",
+    number = "7",
+    pages = "074023",
+    year = "2017"
+}
+
+@article{Komiske:2022enw,
+    author = "Komiske, Patrick T. and Moult, Ian and Thaler, Jesse and Zhu, Hua Xing",
+    title = "{Analyzing N-Point Energy Correlators inside Jets with CMS Open Data}",
+    eprint = "2201.07800",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    reportNumber = "MIT-CTP 5389",
+    doi = "10.1103/PhysRevLett.130.051901",
+    journal = "Phys. Rev. Lett.",
+    volume = "130",
+    number = "5",
+    pages = "051901",
+    year = "2023"
+}
+
+@article{Berger:2016oht,
+    author = "Berger, Edmond L. and Gao, Jun and Yuan, C. -P. and Zhu, Hua Xing",
+    title = "{NNLO QCD Corrections to t-channel Single Top-Quark Production and Decay}",
+    eprint = "1606.08463",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    doi = "10.1103/PhysRevD.94.071501",
+    journal = "Phys. Rev. D",
+    volume = "94",
+    number = "7",
+    pages = "071501",
+    year = "2016"
+}
+
+@article{Luo:2019szz,
+    author = "Luo, Ming-xing and Yang, Tong-Zhi and Zhu, Hua Xing and Zhu, Yu Jiao",
+    title = "{Quark Transverse Parton Distribution at the Next-to-Next-to-Next-to-Leading Order}",
+    eprint = "1912.05778",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-ph",
+    doi = "10.1103/PhysRevLett.124.092001",
+    journal = "Phys. Rev. Lett.",
+    volume = "124",
+    number = "9",
+    pages = "092001",
+    year = "2020"
+}
