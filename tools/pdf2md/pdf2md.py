@@ -17,10 +17,23 @@ def _build_header(token: str) -> dict:
     }
 
 
+def _converted_stems(output_dir: Path) -> set[str]:
+    """返回已转换完成（或已下载结果包）的文件 stem 集合，用于跳过重复转换。
+
+    规则：
+    - 存在同名 .md 视为已完成
+    - 或者存在同名 .zip（API 返回的结果包）也视为已完成
+    """
+    output_dir = Path(output_dir)
+    md_set = {p.stem for p in output_dir.rglob("*.md")}
+    zip_set = {p.stem for p in output_dir.rglob("*.zip")}
+    return md_set | zip_set
+
+
 def new_files(file_dir: str | Path, output_dir: str | Path) -> dict[str, list[str]]:
     file_dir = Path(file_dir)
     output_dir = Path(output_dir)
-    converted = {p.stem for p in output_dir.rglob("*.md")}
+    converted = _converted_stems(output_dir)
     candidates = [p for p in file_dir.rglob("*.pdf") if p.stem not in converted]
     uniq: dict[str, list[str]] = defaultdict(list)
     for p in candidates:
@@ -203,16 +216,21 @@ def convert_pdfs_to_md(teacher: str, pdf_root: str | Path, md_root: str | Path, 
     file_dir = pdf_root / teacher
     output_dir = md_root / teacher
     if subdirs:
-        # 仅在这些子目录内转换
-        pdf_paths = []
-        for sd in subdirs:
-            pdf_paths.append(file_dir / sd)
-        # 临时聚合目录到一个 temp 根以便 new_files 逻辑
-        # 这里直接针对每个子目录分别处理
+        # 仅在这些子目录内转换；跨子目录去重（若任一子目录已生成 md/zip 即跳过）
         uniques: dict[str, list[str]] = {}
+        converted_global = _converted_stems(output_dir)
         for sd in subdirs:
-            u = new_files(file_dir / sd, output_dir / sd)
-            uniques.update({k: [str(Path(sd) / Path(v[0]))] for k, v in u.items()})
+            sd_pdf_root = file_dir / sd
+            sd_rel_prefix = Path(sd)
+            # 遍历该子目录下的所有 pdf，若其 stem 不在全局已完成集合，则加入任务
+            for p in sd_pdf_root.rglob("*.pdf"):
+                stem = p.stem
+                if stem in converted_global:
+                    continue
+                rel = str(sd_rel_prefix / p.relative_to(sd_pdf_root))
+                uniques.setdefault(stem, []).append(rel)
+                # 防止同名 pdf 出现在后续子目录再次入列
+                converted_global.add(stem)
     else:
         uniques = new_files(file_dir, output_dir)
 
@@ -244,6 +262,24 @@ def convert_pdfs_to_md(teacher: str, pdf_root: str | Path, md_root: str | Path, 
     replicate_files(files(file_dir), output_dir)
 
 
+def resume_with_batch(batch_id: str, teacher: str, pdf_root: str | Path, md_root: str | Path, token: str, task_file: str = "task.json"):
+    """根据上次保存的 task.json（stem -> 相对路径）恢复批次结果下载与解包。"""
+    pdf_root = Path(pdf_root)
+    md_root = Path(md_root)
+    file_dir = pdf_root / teacher
+    output_dir = md_root / teacher
+    header = _build_header(token)
+    try:
+        with open(task_file, "r", encoding="utf-8") as f:
+            uniques = json.load(f)
+    except Exception as e:
+        print(f"无法读取任务文件 {task_file}：{e}")
+        return
+    batch_retrieve(batch_id, uniques, file_dir, output_dir, header)
+    process_all_zips(output_dir)
+    replicate_files(files(file_dir), output_dir)
+
+
 def main():
     ap = argparse.ArgumentParser(description="批量将 Downloads_pdf/<教师> 下的PDF转换为Markdown到 data/<教师>")
     ap.add_argument('--teacher', required=True, help='教师名称（用于文件夹名）')
@@ -252,6 +288,7 @@ def main():
     ap.add_argument('--token', default=os.getenv('MINERU_TOKEN', ''), help='MinerU API Token，默认读环境变量 MINERU_TOKEN')
     ap.add_argument('--subdirs', default=None, help='仅处理这些子目录，逗号分隔，例如 main,ref1,cited')
     ap.add_argument('--limit', type=int, default=None, help='最多处理的文件数（可选）')
+    ap.add_argument('--resume-batch', default=None, help='仅恢复指定 batch_id 的结果下载（依赖 task.json）')
     args = ap.parse_args()
 
     if not args.token:
@@ -259,7 +296,10 @@ def main():
         return
 
     subdirs = [s.strip() for s in args.subdirs.split(',')] if args.subdirs else None
-    convert_pdfs_to_md(args.teacher, args.pdf_root, args.md_root, args.token, subdirs=subdirs, limit=args.limit)
+    if args.resume_batch:
+        resume_with_batch(args.resume_batch, args.teacher, args.pdf_root, args.md_root, args.token)
+    else:
+        convert_pdfs_to_md(args.teacher, args.pdf_root, args.md_root, args.token, subdirs=subdirs, limit=args.limit)
 
 
 if __name__ == '__main__':
