@@ -122,9 +122,9 @@ def scan_and_extract(data_root: Path, *, exts: list[str], remove_zip: bool, pref
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="解压 data 目录的 ZIP，仅保留指定后缀（默认 pdf）")
+    ap = argparse.ArgumentParser(description="解压 data 目录的 ZIP，仅保留指定后缀（默认 md）")
     ap.add_argument("--data-root", default=str(Path(__file__).resolve().parents[2] / "data"), help="待扫描的根目录（默认 ./data）")
-    ap.add_argument("--only-ext", action="append", help="要保留的后缀（不含点），可多次指定；默认 pdf")
+    ap.add_argument("--only-ext", action="append", help="要保留的后缀（不含点），可多次指定；默认 md")
     ap.add_argument("--remove-zip", action="store_true", help="成功后删除 ZIP 文件")
     ap.add_argument("--prefix-with-zip-stem", action="store_true", help="重名时使用 ZIP 文件名作为前缀，降低冲突")
     ap.add_argument("--dry-run", action="store_true", help="仅打印操作计划，不写文件")
@@ -134,7 +134,7 @@ def main() -> int:
     if not data_root.exists():
         print(f"目录不存在：{data_root}")
         return 2
-    exts = args.only_ext if args.only_ext else ["pdf"]
+    exts = args.only_ext if args.only_ext else ["md"]
     return 0 if scan_and_extract(data_root, exts=exts, remove_zip=args.remove_zip, prefix_with_zip=args.prefix_with_zip_stem, dry_run=args.dry_run) >= 0 else 1
 
 

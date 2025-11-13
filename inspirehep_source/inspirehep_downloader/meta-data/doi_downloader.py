@@ -494,7 +494,7 @@ def dir_name_from_metadata(meta_norm: Dict[str, Any]) -> str:
     return _sanitize_dir_name(str(rid))
 
 
-def process_one_by_doi(client: Any, doi: str, out_dir: str, download: bool = True, years_window: Optional[int] = None) -> Dict[str, Any]:
+def process_one_by_doi(client: Any, doi: str, out_dir: str, download: bool = True, years_window: Optional[int] = None, *, compute_young: bool = True) -> Dict[str, Any]:
     """基于 DOI 处理单篇：优先用 DOI 或 URL 下载 PDF，不依赖 record_id 作为输入。"""
     ensure_dir(out_dir)
     # 命中记录（含原始 metadata，可直接提取 PDF URL）
@@ -542,18 +542,19 @@ def process_one_by_doi(client: Any, doi: str, out_dir: str, download: bool = Tru
         except Exception:
             pass
 
-    # 年轻作者增强
-    if years_window is None:
-        years_window = get_young_author_years()
-    pub_year = None
-    if "published" in item and isinstance(item["published"], dict):
-        pub_year = item["published"].get("year")
-    ya = compute_young_author_fields(client, item.get("authors", []), pub_year, years_window)
-    item.update(ya)
+    # 年轻作者增强（可关闭以加速）
+    if compute_young:
+        if years_window is None:
+            years_window = get_young_author_years()
+        pub_year = None
+        if "published" in item and isinstance(item["published"], dict):
+            pub_year = item["published"].get("year")
+        ya = compute_young_author_fields(client, item.get("authors", []), pub_year, years_window)
+        item.update(ya)
     return item
 
 
-def process_one_by_record_id_using_url(client: Any, record_id: str, out_dir: str, download: bool = True, years_window: Optional[int] = None) -> Dict[str, Any]:
+def process_one_by_record_id_using_url(client: Any, record_id: str, out_dir: str, download: bool = True, years_window: Optional[int] = None, *, compute_young: bool = False) -> Dict[str, Any]:
     """用于关联文献：由 record_id 获取原始 metadata，提取 URL/DOI 后按 URL/DOI 下载 PDF。"""
     ensure_dir(out_dir)
     rec = client.get_record(record_id)
@@ -561,6 +562,10 @@ def process_one_by_record_id_using_url(client: Any, record_id: str, out_dir: str
     meta_norm = client.get_metadata(record_id)
     item = to_items_metadata(meta_norm)
 
+    # 准备文件名（无论是否下载）
+    base_name = dir_name_from_metadata(meta_norm)
+    pdf_path = os.path.join(out_dir, f"{base_name}.pdf")
+    meta_path = os.path.join(out_dir, f"{base_name}_metadata.json")
     # 下载 PDF 优先 URL（documents/arXiv）
     if download:
         pdf_url = _pdf_url_from_inspire_metadata_raw(md_raw)
@@ -572,8 +577,6 @@ def process_one_by_record_id_using_url(client: Any, record_id: str, out_dir: str
                     pdf_url = resolve_pdf_via_doi_source(doi)
                 except Exception:
                     pdf_url = None
-        base_name = dir_name_from_metadata(meta_norm)
-        pdf_path = os.path.join(out_dir, f"{base_name}.pdf")
         if pdf_url:
             try:
                 try:
@@ -583,8 +586,6 @@ def process_one_by_record_id_using_url(client: Any, record_id: str, out_dir: str
             except Exception as e:
                 print(f"警告: 关联文献 PDF 下载失败 ({pdf_url}): {e}")
     # 仅在存在 PDF 时写元数据；否则删除残留的元数据
-    base_name = dir_name_from_metadata(meta_norm)
-    meta_path = os.path.join(out_dir, f"{base_name}_metadata.json")
     if os.path.exists(pdf_path):
         with open(meta_path, 'w', encoding='utf-8') as f:
             json.dump(meta_norm, f, ensure_ascii=False, indent=2)
@@ -595,14 +596,15 @@ def process_one_by_record_id_using_url(client: Any, record_id: str, out_dir: str
         except Exception:
             pass
 
-    # 年轻作者增强
-    if years_window is None:
-        years_window = get_young_author_years()
-    pub_year = None
-    if "published" in item and isinstance(item["published"], dict):
-        pub_year = item["published"].get("year")
-    ya = compute_young_author_fields(client, item.get("authors", []), pub_year, years_window)
-    item.update(ya)
+    # 年轻作者增强（默认关闭以加速）
+    if compute_young:
+        if years_window is None:
+            years_window = get_young_author_years()
+        pub_year = None
+        if "published" in item and isinstance(item["published"], dict):
+            pub_year = item["published"].get("year")
+        ya = compute_young_author_fields(client, item.get("authors", []), pub_year, years_window)
+        item.update(ya)
     return item
 
 

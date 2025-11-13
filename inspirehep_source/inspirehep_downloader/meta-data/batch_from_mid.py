@@ -364,17 +364,18 @@ def download_for_teacher(client: InspireHEPClient, teacher: str, recent_dois: Li
 
     def handle_one_doi(doi: str):
         printv(f"[{teacher}] ▶ main DOI: {doi}")
-        hit = client.find_record_by_doi(doi)
-        if not hit:
-            print(f"未找到 DOI={doi} 对应记录，跳过")
-            return
-        rid = str(hit.get('id'))
-        # 主文献输出目录：按 DOI 命名
+        # 先根据 DOI 直接定位输出目录，若已存在则跳过网络查询
         out_dir = main_dir / (doi.replace('/', '_'))
+        rid = None
         if has_any_metadata_json(out_dir):
             printv(f"[{teacher}] ↷ 跳过 main（已存在）: {out_dir}")
         else:
-            item = process_one_by_doi(client, doi, str(out_dir), download=True, years_window=years_window)
+            hit = client.find_record_by_doi(doi)
+            if not hit:
+                print(f"未找到 DOI={doi} 对应记录，跳过")
+                return
+            rid = str(hit.get('id'))
+            item = process_one_by_doi(client, doi, str(out_dir), download=True, years_window=years_window, compute_young=True)
             printv(f"[{teacher}] ✓ main saved at {out_dir}")
         # 将 main PDF 复制到 Downloads_pdf/<老师>/main，并写入 history.json
         try:
@@ -409,9 +410,22 @@ def download_for_teacher(client: InspireHEPClient, teacher: str, recent_dois: Li
             if verbose:
                 print(f"[warn] 复制 main 到 Downloads_pdf 失败: {e}")
         # 参考文献 → ref1（目录名优先 DOI/arXiv）
+        # 若尚未解析 rid，则此处查一次
+        if rid is None:
+            try:
+                hit2 = client.find_record_by_doi(doi)
+                if hit2:
+                    rid = str(hit2.get('id'))
+            except Exception:
+                rid = None
+        if not rid:
+            return
         ref_ids = fetch_related_ids(client, rid, kind="references", limit=1000)
         ref_ids = maybe_sample(ref_ids, label="refs")
         printv(f"[{teacher}]   refs total = {len(ref_ids)} (并发 {workers_related})")
+        # 去重（同一老师内）
+        seen_ref: set[str] = set()
+        ref_ids = [x for x in ref_ids if (x not in seen_ref and not seen_ref.add(x))]
 
         def _handle_ref(rr: str, idx: int):
             try:
@@ -423,7 +437,7 @@ def download_for_teacher(client: InspireHEPClient, teacher: str, recent_dois: Li
                     # 即便已存在，也尝试复制 PDF 与写入 history.json（幂等）
                 else:
                     printv(f"[{teacher}]   refs {idx}/{len(ref_ids)} -> id={rr} dir={name}")
-                    process_one_by_record_id_using_url(client, rr, str(target), download=not no_related_downloads, years_window=years_window)
+                    process_one_by_record_id_using_url(client, rr, str(target), download=not no_related_downloads, years_window=years_window, compute_young=False)
                 # 复制到 Downloads_pdf/ref1 并写入 history
                 try:
                     meta_path = next(target.glob("*_metadata.json"), None)
@@ -458,6 +472,9 @@ def download_for_teacher(client: InspireHEPClient, teacher: str, recent_dois: Li
         cit_ids = fetch_related_ids(client, rid, kind="citations", limit=1000)
         cit_ids = maybe_sample(cit_ids, label="cited")
         printv(f"[{teacher}]   cited total = {len(cit_ids)} (并发 {workers_related})")
+        # 去重（同一老师内）
+        seen_cit: set[str] = set()
+        cit_ids = [x for x in cit_ids if (x not in seen_cit and not seen_cit.add(x))]
 
         def _handle_cit(cc: str, idx: int):
             try:
@@ -469,7 +486,7 @@ def download_for_teacher(client: InspireHEPClient, teacher: str, recent_dois: Li
                     # 同样进行复制与 history 写入
                 else:
                     printv(f"[{teacher}]   cited {idx}/{len(cit_ids)} -> id={cc} dir={name}")
-                    process_one_by_record_id_using_url(client, cc, str(target), download=not no_related_downloads, years_window=years_window)
+                    process_one_by_record_id_using_url(client, cc, str(target), download=not no_related_downloads, years_window=years_window, compute_young=False)
                 try:
                     meta_path = next(target.glob("*_metadata.json"), None)
                     if meta_path is not None:
