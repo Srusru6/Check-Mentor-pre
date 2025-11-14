@@ -21,7 +21,8 @@ python -m pip install -r requirements.txt
     - OPENAI_API_KEY、OPENAI_API_BASE、LLM_MODEL
     - 可选：DASHSCOPE_API_KEY、LLM_FALLBACK_MODEL
 - MinerU Token（PDF→MD）：设置环境变量 `MINERU_TOKEN` 或在命令中通过 `--token` 传入
-- 可选 `config.ini`（仅下载器使用）：Top-N、近几年筛选等
+- 可选 `config.ini`（仅下载器使用）：Top-N、近几年筛选、refs/cited 抽样等
+    - `[download].sample_threshold` 与 `[download].sample_size`：当某主文献的参考文献（refs）或被引（cited）数量超过阈值时，随机抽样指定数量进行处理；留空或 ≤0 表示不启用。
 
 ## 数据目录
 
@@ -50,7 +51,7 @@ python .\main.py download --from-results AUTO --workers 6 --depth 1 --pdf-root .
 python .\main.py download --doi "10.1038/nphys4074" --teacher "示例老师" --depth 1 --workers 4
 ```
 
-2) PDF → Markdown（封装 `DOIdownloader/pdf2md.py`）
+2) PDF → Markdown（封装 `tools/pdf2md/pdf2md.py`）
 ```powershell
 python .\main.py pdf2md --teacher "示例老师" --pdf-root .\Downloads_pdf --md-root .\data --subdirs main,ref1,cited --token $env:MINERU_TOKEN
 ```
@@ -79,7 +80,7 @@ python .\main.py run-all --target "示例老师" --token $env:MINERU_TOKEN --tes
 ## 模块
 
 - `DOIdownloader/download.py`：从 `results.txt` 读取教师与 DOI，按层级下载（含可选被引 cited）
-- `DOIdownloader/pdf2md.py`：调用 MinerU API 批量转换 PDF→Markdown，保留 full.json、图片
+- `tools/pdf2md/pdf2md.py`：调用 MinerU API 批量转换 PDF→Markdown，保留 full.json、图片
 - `DOIdownloader/merge_history_to_md.py`：将 PDF 端与 MD 端历史合并至 `data`
 - `core/*`：三大工作流与最终报告整合/翻译
 
@@ -253,7 +254,7 @@ python .\main.py run-all --target "张三" --token $env:MINERU_TOKEN --test-mode
 ## 模块说明
 
 - `DOIdownloader/download.py`：支持从 `results.txt` 读取教师与 DOIs 映射，按层级下载 PDF（含可选被引 cited）。
-- `DOIdownloader/pdf2md.py`：调用 MinerU API 批量转换 PDF → Markdown，并保留 full.json 与图片。
+- `tools/pdf2md/pdf2md.py`：调用 MinerU API 批量转换 PDF → Markdown，并保留 full.json 与图片。
 - `DOIdownloader/merge_history_to_md.py`：将 PDF 端与 MD 端历史合并至 `data`，便于统一查看。
 - `core/*`：三大工作流与最终报告整合、翻译输出。
 

@@ -62,7 +62,9 @@ def cmd_download(ns: argparse.Namespace) -> int:
 
 def cmd_pdf2md(ns: argparse.Namespace) -> int:
     repo = Path(__file__).resolve().parent
-    script = repo / 'DOIdownloader' / 'pdf2md.py'
+    # 新位置：tools/pdf2md/pdf2md.py（若不存在则回退到旧位置 DOI_source/pdf2md.py）
+    candidate_new = repo / 'tools' / 'pdf2md' / 'pdf2md.py'
+    script = candidate_new if candidate_new.exists() else (repo / 'DOI_source' / 'pdf2md.py')
     argv = ['--teacher', ns.teacher]
     if ns.pdf_root:
         argv += ['--pdf-root', ns.pdf_root]
@@ -79,7 +81,8 @@ def cmd_pdf2md(ns: argparse.Namespace) -> int:
 
 def cmd_merge_history(ns: argparse.Namespace) -> int:
     repo = Path(__file__).resolve().parent
-    script = repo / 'DOIdownloader' / 'merge_history_to_md.py'
+    # 修正路径：文件实际位于 DOI_source/merge_history_to_md.py
+    script = repo / 'DOI_source' / 'merge_history_to_md.py'
     argv = ['--teacher', ns.teacher]
     if ns.subdir:
         argv += ['--subdir', ns.subdir]
@@ -116,6 +119,27 @@ def cmd_run_all(ns: argparse.Namespace) -> int:
     # 3) 分析（直接使用 data/<teacher> 作为数据根）
     print("[3/3] Running analysis...")
     return cmd_analyze(argparse.Namespace(target=teacher, test_mode=ns.test_mode, data_root=str(Path(md_root) / teacher)))
+
+
+def cmd_meta_pack(ns: argparse.Namespace) -> int:
+    repo = Path(__file__).resolve().parent
+    script = repo / 'inspirehep_source' / 'inspirehep_downloader' / 'meta-data' / 'run_meta_pack.py'
+    argv = []
+    if ns.mid_file:
+        argv += ['--mid-file', ns.mid_file]
+    if ns.teacher:
+        argv += ['--teacher', ns.teacher]
+    if ns.dois:
+        argv += ['--dois', ns.dois]
+    if ns.data_root:
+        argv += ['-o', ns.data_root]
+    if ns.k is not None:
+        argv += ['--k', str(ns.k)]
+    if ns.no_related_downloads:
+        argv.append('--no-related-downloads')
+    if ns.verbose:
+        argv.append('--verbose')
+    return _run_py(script, argv)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -167,6 +191,17 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument('--token', default=None, help='MinerU API Token（默认读环境变量 MINERU_TOKEN）')
     pr.add_argument('--limit', type=int, default=None, help='最多处理的文件数')
     pr.set_defaults(func=cmd_run_all)
+
+    # meta-pack
+    pm = sub.add_parser('meta-pack', help='基于 meta-data 脚本生成 DOI_source 风格的数据布局（data/<teacher>/main|ref1|cited）')
+    pm.add_argument('--mid-file', default=None, help='mid 文件路径（JSON 或文本块）')
+    pm.add_argument('--teacher', default=None, help='仅处理该老师（可选）')
+    pm.add_argument('--dois', default=None, help='逗号分隔的 DOI 列表（与 --teacher 一起使用）')
+    pm.add_argument('-o', '--data-root', default=None, help='data 根目录（默认 ./data）')
+    pm.add_argument('--k', type=int, default=None, help='每个列表最多处理前 K 篇（可选）')
+    pm.add_argument('--no-related-downloads', action='store_true', help='仅索引相关文献，不下载其 PDF/元数据')
+    pm.add_argument('--verbose', action='store_true', help='详细输出')
+    pm.set_defaults(func=cmd_meta_pack)
 
     return p
 
