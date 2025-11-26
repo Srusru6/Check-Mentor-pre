@@ -515,12 +515,6 @@ def process_one_by_doi(client: Any, doi: str, out_dir: str, download: bool = Tru
     pdf_path = os.path.join(out_dir, pdf_filename)
     if download:
         pdf_url = _pdf_url_from_inspire_metadata_raw(md_raw)
-        if not pdf_url:
-            # 回退：使用 DOI_source 策略解析 PDF 直链
-            try:
-                pdf_url = resolve_pdf_via_doi_source(doi)
-            except Exception:
-                pdf_url = None
         if pdf_url:
             try:
                 # 优先走 client 下载（保持统一），若失败则直接 HTTP 下载
@@ -569,14 +563,6 @@ def process_one_by_record_id_using_url(client: Any, record_id: str, out_dir: str
     # 下载 PDF 优先 URL（documents/arXiv）
     if download:
         pdf_url = _pdf_url_from_inspire_metadata_raw(md_raw)
-        if not pdf_url:
-            # 若原始元数据无直链，尝试用 DOI 回退
-            doi = (item.get('doi') or meta_norm.get('doi')) if 'item' in locals() else meta_norm.get('doi')
-            if doi:
-                try:
-                    pdf_url = resolve_pdf_via_doi_source(doi)
-                except Exception:
-                    pdf_url = None
         if pdf_url:
             try:
                 try:

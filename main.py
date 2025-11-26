@@ -133,6 +133,8 @@ def cmd_meta_pack(ns: argparse.Namespace) -> int:
         argv += ['--dois', ns.dois]
     if ns.data_root:
         argv += ['-o', ns.data_root]
+    if ns.pdf_root:
+        argv += ['--pdf-root', ns.pdf_root]
     if ns.k is not None:
         argv += ['--k', str(ns.k)]
     if ns.no_related_downloads:
@@ -198,10 +200,23 @@ def build_parser() -> argparse.ArgumentParser:
     pm.add_argument('--teacher', default=None, help='仅处理该老师（可选）')
     pm.add_argument('--dois', default=None, help='逗号分隔的 DOI 列表（与 --teacher 一起使用）')
     pm.add_argument('-o', '--data-root', default=None, help='data 根目录（默认 ./data）')
+    pm.add_argument('--pdf-root', default=None, help='PDF 根目录（默认 ./Downloads_pdf）')
     pm.add_argument('--k', type=int, default=None, help='每个列表最多处理前 K 篇（可选）')
     pm.add_argument('--no-related-downloads', action='store_true', help='仅索引相关文献，不下载其 PDF/元数据')
     pm.add_argument('--verbose', action='store_true', help='详细输出')
     pm.set_defaults(func=cmd_meta_pack)
+
+    # download-inspire
+    pdi = sub.add_parser('download-inspire', help='从 InspireHEP 下载论文（meta-pack 的别名）')
+    pdi.add_argument('--mid-file', default=None, help='mid 文件路径（JSON 或文本块）')
+    pdi.add_argument('--teacher', default=None, help='仅处理该老师（可选）')
+    pdi.add_argument('--dois', default=None, help='逗号分隔的 DOI 列表（与 --teacher 一起使用）')
+    pdi.add_argument('-o', '--data-root', default=None, help='data 根目录（默认 ./data）')
+    pdi.add_argument('--pdf-root', default=None, help='PDF 根目录（默认 ./Downloads_pdf）')
+    pdi.add_argument('--k', type=int, default=None, help='每个列表最多处理前 K 篇（可选）')
+    pdi.add_argument('--no-related-downloads', action='store_true', help='仅索引相关文献，不下载其 PDF/元数据')
+    pdi.add_argument('--verbose', action='store_true', help='详细输出')
+    pdi.set_defaults(func=cmd_meta_pack)
 
     return p
 

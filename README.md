@@ -75,6 +75,28 @@ python .\main.py analyze --target "示例老师" --data-root D:\data\示例老�
 python .\main.py run-all --target "示例老师" --token $env:MINERU_TOKEN --test-mode
 ```
 
+6) InspireHEP 下载器 (NEW! ⚛️)
+
+针对高能物理领域，支持从 InspireHEP 批量下载论文及其引用/被引文献，并自动整理为本项目所需的目录结构。
+
+**特点：**
+- 自动下载 PDF 和元数据
+- 自动计算年轻学者指数
+- 支持从 `mid.txt` 批量导入或命令行直接指定
+- **注意**：如果 InspireHEP 上没有提供 PDF 下载链接，程序将自动跳过该文献的下载。
+
+**命令示例：**
+
+从 `mid.txt` 批量下载：
+```powershell
+python .\main.py meta-pack --mid-file .\inspirehep_source\pre-process\mid.txt --k 5 --verbose
+```
+
+直接指定老师和 DOI：
+```powershell
+python .\main.py meta-pack --teacher "曹庆宏" --dois "10.1103/PhysRevLett.116.061102" --k 3
+```
+
 报告输出：`output/示例老师_final_report.md`
 
 ## 模块
