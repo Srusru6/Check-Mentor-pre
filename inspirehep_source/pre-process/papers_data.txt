@@ -1,27 +1,141 @@
-## 论文 DOI 列表
+## 论文 DOI 及作者列表 (严格匹配模式)
 
-Qing-Hong Cao
-==============================
-【时间排序】
-10.1103/rvss-98yr
-10.1016/j.nuclphysb.2024.116781
-10.22323/1.476.0342
-10.1016/j.comnet.2024.110795
-10.1103/PhysRevA.110.022427
-10.1103/PhysRevLett.134.021801
-10.1103/PhysRevD.109.073005
-10.1103/PhysRevLett.132.223601
-10.1016/j.nima.2023.168958
+==================================================
+👤 Qing-Hong Cao
+==================================================
 
-【引用排序】
-10.1103/PhysRevD.78.013004
-10.1103/PhysRevD.76.095011
-10.23731/CYRM-2019-007.1
-10.23731/CYRM-2017-003.255
-10.1007/JHEP08(2011)018
-10.1007/s11467-023-1333-z
-10.1103/PhysRevD.81.114004
-10.1103/PhysRevLett.106.201801
-10.1103/PhysRevD.72.094027
-10.1103/PhysRevD.71.054023
+【时间排序 (Most Recent)】
 ------------------------------
+DOI:     10.1016/j.nuclphysb.2024.116781
+Authors: Cao, Qing-Hong; Liu, Yandong; Yuan, Shu-Run
+
+DOI:     10.22323/1.476.0342
+Authors: Bi, Qi; Cao, Qing-Hong; Cheng, Kun; Zhang, Hao
+
+DOI:     10.1103/PhysRevLett.134.021801
+Authors: Cao, Qing-Hong; Cheng, Kun; Liu, Yandong
+
+DOI:     10.1103/PhysRevD.109.073005
+Authors: Cao, Qing-Hong; Cheng, Kun; Liu, Yandong; Wang, Xiao-Rui
+
+DOI:     10.1103/PhysRevD.110.015029
+Authors: Cao, Qing-Hong; Guo, Jinhui; Liu, Jia; Luo, Yan; Wang, Xiao-Ping
+
+DOI:     10.1088/1475-7516/2025/01/099
+Authors: Cao, Qing-Hong; Liu, Zuowei; Wang, Jun-Chen
+
+DOI:     10.1103/PhysRevD.109.036022
+Authors: Bi, Qi; Cao, Qing-Hong; Cheng, Kun; Zhang, Hao
+
+DOI:     10.1103/PhysRevD.108.055036
+Authors: Cao, Qing-Hong; Cheng, Kun; Xu, Changlong
+
+DOI:     10.1103/PhysRevD.111.095003
+Authors: Cao, Qing-Hong; Hashino, Katsuya; Li, Xu-Xiang; Yue, Jiang-Hao
+
+DOI:     10.1103/PhysRevD.107.055040
+Authors: Cao, Qing-Hong; Cheng, Kun; Liu, Yandong; Wen, Xin-Kai; Xu, Changlong; Zhang, Hao
+
+
+【引用排序 (Most Cited)】
+------------------------------
+DOI:     10.1103/PhysRevD.78.013004
+Authors: Nadolsky, Pavel M.; Lai, Hung-Liang; Cao, Qing-Hong; Huston, Joey; Pumplin, Jon; Stump, Daniel; Tung, Wu-Ki; Yuan, C.-P.
+
+DOI:     10.1103/PhysRevD.76.095011
+Authors: Cao, Qing-Hong; Ma, Ernest; Rajasekaran, G.
+
+DOI:     10.1007/JHEP08(2011)018
+Authors: Cao, Qing-Hong; Chen, Chuan-Ren; Li, Chong Sheng; Zhang, Hao
+
+DOI:     10.1103/PhysRevD.81.114004
+Authors: Cao, Qing-Hong; McKeen, David; Rosner, Jonathan L.; Shaughnessy, Gabe; Wagner, Carlos E.M.
+
+DOI:     10.1103/PhysRevLett.106.201801
+Authors: Berger, Edmond L.; Cao, Qing-Hong; Chen, Chuan-Ren; Li, Chong Sheng; Zhang, Hao
+
+DOI:     10.1103/PhysRevD.72.094027
+Authors: Cao, Qing-Hong; Schwienhorst, Reinhard; Benitez, Jorge A.; Brock, Raymond; Yuan, C.-P.
+
+DOI:     10.1103/PhysRevD.71.054023
+Authors: Cao, Qing-Hong; Schwienhorst, Reinhard; Yuan, C.-P.
+
+DOI:     10.1016/j.physletb.2007.10.057
+Authors: Cao, Qing-Hong; Wudka, Jose; Yuan, C.-P.
+
+DOI:     10.1103/PhysRevD.93.075030
+Authors: Cao, Qing-Hong; Liu, Yandong; Xie, Ke-Pan; Yan, Bin; Zhang, Dong-Ming
+
+DOI:     10.1016/j.physletb.2009.02.015
+Authors: Cao, Qing-Hong; Ma, Ernest; Shaughnessy, Gabe
+
+
+==================================================
+👤 Hua Xing Zhu
+==================================================
+
+【时间排序 (Most Recent)】
+------------------------------
+DOI:     10.1007/JHEP09(2025)051
+Authors: Ju, Wan-Li; Shu, Zhe-Yan; Yang, Tong-Zhi; Zhang, Zhen-Hua; Zhu, Hua Xing
+
+DOI:     10.1103/vtz2-6bnm
+Authors: He, Chuan-Qi; Xing, Hongxi; Yang, Tong-Zhi; Zhu, Hua Xing
+
+DOI:     10.1007/JHEP06(2025)176
+Authors: Xu, Zhen; Zhu, Hua Xing
+
+DOI:     10.1103/PhysRevLett.134.151901
+Authors: Liu, Xiaohui; Vogelsang, Werner; Yuan, Feng; Zhu, Hua Xing
+
+DOI:     10.22323/1.467.0069
+Authors: Jaarsma, Max; Li, Yibei; Moult, Ian; Waalewijn, Wouter; Zhu, Hua Xing
+
+DOI:     10.1103/5qrc-4vq1
+Authors: Henn, Johannes; Ma, Rourou; Xu, Yongqun; Yan, Kai; Zhang, Yang; Zhu, Hua Xing
+
+DOI:     10.1103/PhysRevLett.133.231901
+Authors: Chen, Hao; Monni, Pier Francesco; Xu, Zhen; Zhu, Hua Xing
+
+DOI:     10.34133/research.0552
+Authors: Guo, Yuxun; Liu, Xiaohui; Yuan, Feng; Zhu, Hua Xing
+
+DOI:     10.1007/JHEP09(2024)072
+Authors: Gao, Anjie; Li, Hai Tao; Moult, Ian; Zhu, Hua Xing
+
+DOI:     10.22323/1.432.0061
+Authors: Chen, Hao; Zhou, Xinan; Zhu, Hua Xing
+
+
+【引用排序 (Most Cited)】
+------------------------------
+DOI:     10.1103/PhysRevLett.110.042001
+Authors: Gao, Jun; Li, Chong Sheng; Zhu, Hua Xing
+
+DOI:     10.1103/PhysRevLett.118.022004
+Authors: Li, Ye; Zhu, Hua Xing
+
+DOI:     10.1103/PhysRevD.102.054012
+Authors: Chen, Hao; Moult, Ian; Zhang, XiaoYuan; Zhu, Hua Xing
+
+DOI:     10.1103/PhysRevD.100.014009
+Authors: Dixon, Lance J.; Moult, Ian; Zhu, Hua Xing
+
+DOI:     10.1103/PhysRevD.84.045022
+Authors: Kelley, Randall; Schwartz, Matthew D.; Schabinger, Robert M.; Zhu, Hua Xing
+
+DOI:     10.1016/j.nuclphysb.2020.115193
+Authors: Li, Ye; Neill, Duff; Zhu, Hua Xing
+
+DOI:     10.1103/PhysRevD.95.074023
+Authors: Moult, Ian; Rothen, Lorena; Stewart, Iain W.; Tackmann, Frank J.; Zhu, Hua Xing
+
+DOI:     10.1007/JHEP04(2019)123
+Authors: Ebert, Markus A.; Moult, Ian; Stewart, Iain W.; Tackmann, Frank J.; Vita, Gherardo; Zhu, Hua Xing
+
+DOI:     10.1103/PhysRevLett.130.051901
+Authors: Komiske, Patrick T.; Moult, Ian; Thaler, Jesse; Zhu, Hua Xing
+
+DOI:     10.1103/PhysRevD.94.071501
+Authors: Berger, Edmond L.; Gao, Jun; Yuan, C. -P.; Zhu, Hua Xing
+
