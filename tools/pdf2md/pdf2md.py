@@ -8,6 +8,7 @@ import zipfile
 import shutil
 import json
 from collections import defaultdict
+import hashlib
 
 
 def _build_header(token: str) -> dict:
@@ -17,10 +18,23 @@ def _build_header(token: str) -> dict:
     }
 
 
+def _converted_stems(output_dir: Path) -> set[str]:
+    """返回已转换完成（或已下载结果包）的文件 stem 集合，用于跳过重复转换。
+
+    规则：
+    - 存在同名 .md 视为已完成
+    - 或者存在同名 .zip（API 返回的结果包）也视为已完成
+    """
+    output_dir = Path(output_dir)
+    md_set = {p.stem for p in output_dir.rglob("*.md")}
+    zip_set = {p.stem for p in output_dir.rglob("*.zip")}
+    return md_set | zip_set
+
+
 def new_files(file_dir: str | Path, output_dir: str | Path) -> dict[str, list[str]]:
     file_dir = Path(file_dir)
     output_dir = Path(output_dir)
-    converted = {p.stem for p in output_dir.rglob("*.md")}
+    converted = _converted_stems(output_dir)
     candidates = [p for p in file_dir.rglob("*.pdf") if p.stem not in converted]
     uniq: dict[str, list[str]] = defaultdict(list)
     for p in candidates:
@@ -35,6 +49,112 @@ def files(file_dir: str | Path) -> dict[str, list[str]]:
     for p in all_files:
         uniq[p.stem].append(str(p.relative_to(file_dir)))
     return dict(uniq)
+
+
+def _file_signature(path: Path, sample_bytes: int = 4 * 1024 * 1024) -> str:
+    """计算 PDF 的签名用于去重：size + sha1(前 sample_bytes)。"""
+    try:
+        size = path.stat().st_size
+        h = hashlib.sha1()
+        with open(path, 'rb') as f:
+            chunk = f.read(sample_bytes)
+            h.update(chunk)
+        return f"{size}-" + h.hexdigest()
+    except Exception:
+        return f"0-err-{path.name}"
+
+
+def _is_converted_rel(output_dir: Path, rel_pdf: Path) -> bool:
+    md_path = output_dir / rel_pdf.with_suffix('.md')
+    zip_path = output_dir / rel_pdf.with_suffix('.zip')
+    return md_path.exists() or zip_path.exists()
+
+
+def _gather_candidates_and_duplicates(file_dir: Path, output_dir: Path, subdirs: list[str] | None) -> tuple[dict[str, list[str]], dict[str, str]]:
+    """收集未转换的候选 PDF（去重后）与重复映射。
+
+    返回：
+    - uniques: {stem: [rel_pdf_path]} 仅包含每个签名的首要条目，用于上传与转换
+    - duplicates_map: {dup_rel: primary_rel} 将重复 PDF 的相对路径映射到首要条目相对路径
+    规则：
+    - 仅考虑尚未在 output_dir 生成 .md 或 .zip 的条目为候选；
+    - 以内容签名（大小+sha1(前4MB)）为分组，优先选择已转换过的路径为主（若组内存在），否则选择组内第一个；
+    - 其余同签名的路径加入 duplicates_map。
+    """
+    # 1) 列举目标范围的全部 PDF 相对路径
+    rel_pdfs: list[Path] = []
+    if subdirs:
+        for sd in subdirs:
+            sd_root = file_dir / sd
+            if not sd_root.exists():
+                continue
+            for p in sd_root.rglob('*.pdf'):
+                rel_pdfs.append(Path(sd) / p.relative_to(sd_root))
+    else:
+        for p in (file_dir.rglob('*.pdf')):
+            rel_pdfs.append(p.relative_to(file_dir))
+
+    # 2) 根据签名分组（只对未转换者考虑去重；但选择主项时优先用已转换者，以便后续复制）
+    groups: dict[str, list[Path]] = defaultdict(list)
+    sig_cache: dict[Path, str] = {}
+    for rel in rel_pdfs:
+        abs_pdf = file_dir / rel
+        sig = _file_signature(abs_pdf)
+        sig_cache[rel] = sig
+        groups[sig].append(rel)
+
+    uniques: dict[str, list[str]] = {}
+    duplicates_map: dict[str, str] = {}
+    for sig, rel_list in groups.items():
+        # 组内若某路径已转换，则选择其为主；否则选择首个未转换的路径为主
+        primary_rel: Path | None = None
+        # 优先：已经转换的（这样本次无需上传，后续直接复制）
+        for rel in rel_list:
+            if _is_converted_rel(output_dir, rel):
+                primary_rel = rel
+                break
+        # 其次：第一个未转换的
+        if primary_rel is None:
+            for rel in rel_list:
+                if not _is_converted_rel(output_dir, rel):
+                    primary_rel = rel
+                    break
+        if primary_rel is None:
+            # 整组都已转换，标记其余为重复复制即可
+            primary_rel = rel_list[0]
+        # 记录 duplicates_map（组内其他路径 -> 主路径）
+        for rel in rel_list:
+            if rel != primary_rel:
+                duplicates_map[str(rel)] = str(primary_rel)
+        # 若主路径尚未转换，加入 uniques 参与上传
+        if not _is_converted_rel(output_dir, primary_rel):
+            stem = primary_rel.stem
+            uniques.setdefault(stem, []).append(str(primary_rel))
+
+    return uniques, duplicates_map
+
+
+def _replicate_duplicates(duplicates_map: dict[str, str], output_dir: Path):
+    """将主路径的 .md/.json 复制到重复路径对应位置。忽略缺失的主文件。"""
+    for dup_rel, primary_rel in duplicates_map.items():
+        dup_md = output_dir / Path(dup_rel).with_suffix('.md')
+        dup_json = output_dir / Path(dup_rel).with_suffix('.json')
+        pri_md = output_dir / Path(primary_rel).with_suffix('.md')
+        pri_json = output_dir / Path(primary_rel).with_suffix('.json')
+        # 复制 MD
+        if pri_md.exists():
+            dup_md.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                shutil.copy(pri_md, dup_md)
+            except Exception as e:
+                print(f"复制重复MD失败 {pri_md} -> {dup_md}: {e}")
+        # 复制 JSON（若存在）
+        if pri_json.exists():
+            dup_json.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                shutil.copy(pri_json, dup_json)
+            except Exception as e:
+                print(f"复制重复JSON失败 {pri_json} -> {dup_json}: {e}")
 
 
 def batch_upload(file_names: list[str], unique_dict: dict[str, list[str]], file_dir: Path, header: dict) -> str | None:
@@ -174,27 +294,51 @@ def process_all_zips(root_dir: Path):
 
 
 def replicate_files(file_dict: dict[str, list[str]], output_dir: Path):
+    """将已生成的 .md 和识别到的 .json 按相同相对路径复制到 data 对应位置。
+
+    行为：
+    - 若存在某一相对路径对应的 .md，则以该 .md 为源复制到同 stem 的其他目标路径。
+    - 若不存在 .md 但存在 .json（识别结果），也会以该 .json 为源复制到同 stem 的其他目标路径。
+    - 当 .md 存在时，仍会同步其旁边的 .json（若有）。
+    """
     for title, paths in file_dict.items():
-        path_objects = [Path(output_dir) / Path(p).with_suffix(".md") for p in paths]
-        existing_file = next((p for p in path_objects if p.exists()), None)
-        if existing_file is None:
-            print(f"⚠️ 未找到 '{title}' 的任何源文件！")
+        md_candidates = [Path(output_dir) / Path(p).with_suffix(".md") for p in paths]
+        json_candidates = [Path(output_dir) / Path(p).with_suffix(".json") for p in paths]
+
+        # 源优先选择：md > json
+        existing_md = next((p for p in md_candidates if p.exists()), None)
+        existing_json = next((p for p in json_candidates if p.exists()), None)
+        if not existing_md and not existing_json:
+            print(f"⚠️ 未找到 '{title}' 的任何已转换文件（.md 或 .json）！")
             continue
-        # 复制到目标路径
-        for target_path in path_objects:
-            if target_path == existing_file:
-                continue
-            target_path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy(existing_file, target_path)
-        # 同步JSON
-        existing_json = existing_file.with_suffix('.json')
-        if existing_json.exists():
-            for target_path in path_objects:
-                if target_path == existing_file:
+
+        # 复制 MD（若存在）
+        if existing_md:
+            for target_md in md_candidates:
+                if target_md == existing_md:
                     continue
-                target_json = target_path.with_suffix('.json')
+                target_md.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy(existing_md, target_md)
+
+        # 同步 JSON：
+        # 1) 优先使用与 existing_md 同目录同名的 .json；
+        # 2) 若不存在，则回退到任一已存在的 json（existing_json）。
+        src_json = None
+        md_side_json = existing_md.with_suffix('.json') if existing_md else None
+        if md_side_json and md_side_json.exists():
+            src_json = md_side_json
+        elif existing_json and existing_json.exists():
+            src_json = existing_json
+
+        if src_json:
+            for target_json in json_candidates:
+                if target_json == src_json:
+                    continue
                 target_json.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy(existing_json, target_json)
+                try:
+                    shutil.copy(src_json, target_json)
+                except Exception as e:
+                    print(f"复制 JSON 失败 {src_json} -> {target_json}: {e}")
 
 
 def convert_pdfs_to_md(teacher: str, pdf_root: str | Path, md_root: str | Path, token: str, subdirs: list[str] | None = None, limit: int | None = None):
@@ -202,19 +346,7 @@ def convert_pdfs_to_md(teacher: str, pdf_root: str | Path, md_root: str | Path, 
     md_root = Path(md_root)
     file_dir = pdf_root / teacher
     output_dir = md_root / teacher
-    if subdirs:
-        # 仅在这些子目录内转换
-        pdf_paths = []
-        for sd in subdirs:
-            pdf_paths.append(file_dir / sd)
-        # 临时聚合目录到一个 temp 根以便 new_files 逻辑
-        # 这里直接针对每个子目录分别处理
-        uniques: dict[str, list[str]] = {}
-        for sd in subdirs:
-            u = new_files(file_dir / sd, output_dir / sd)
-            uniques.update({k: [str(Path(sd) / Path(v[0]))] for k, v in u.items()})
-    else:
-        uniques = new_files(file_dir, output_dir)
+    uniques, duplicates_map = _gather_candidates_and_duplicates(file_dir, output_dir, subdirs)
 
     if not uniques:
         print("没有新的PDF需要转换。")
@@ -225,10 +357,12 @@ def convert_pdfs_to_md(teacher: str, pdf_root: str | Path, md_root: str | Path, 
     if limit is not None and limit > 0:
         file_names = file_names[:limit]
 
-    # 记录任务
+    # 记录任务与重复映射
     try:
         with open("task.json", "w", encoding="utf-8") as file:
             json.dump(uniques, file, ensure_ascii=False, indent=4)
+        with open("duplicates.json", "w", encoding="utf-8") as fdup:
+            json.dump(duplicates_map, fdup, ensure_ascii=False, indent=2)
     except Exception:
         pass
 
@@ -242,6 +376,34 @@ def convert_pdfs_to_md(teacher: str, pdf_root: str | Path, md_root: str | Path, 
     batch_retrieve(batch_id, uniques, file_dir, output_dir, header)
     process_all_zips(output_dir)
     replicate_files(files(file_dir), output_dir)
+    # 将主路径转换结果复制到重复路径
+    _replicate_duplicates(duplicates_map, output_dir)
+
+
+def resume_with_batch(batch_id: str, teacher: str, pdf_root: str | Path, md_root: str | Path, token: str, task_file: str = "task.json"):
+    """根据上次保存的 task.json（stem -> 相对路径）恢复批次结果下载与解包。"""
+    pdf_root = Path(pdf_root)
+    md_root = Path(md_root)
+    file_dir = pdf_root / teacher
+    output_dir = md_root / teacher
+    header = _build_header(token)
+    try:
+        with open(task_file, "r", encoding="utf-8") as f:
+            uniques = json.load(f)
+    except Exception as e:
+        print(f"无法读取任务文件 {task_file}：{e}")
+        return
+    # 尝试读取重复映射
+    duplicates_map: dict[str, str] = {}
+    try:
+        with open("duplicates.json", "r", encoding="utf-8") as fdup:
+            duplicates_map = json.load(fdup)
+    except Exception:
+        duplicates_map = {}
+    batch_retrieve(batch_id, uniques, file_dir, output_dir, header)
+    process_all_zips(output_dir)
+    replicate_files(files(file_dir), output_dir)
+    _replicate_duplicates(duplicates_map, output_dir)
 
 
 def main():
@@ -252,6 +414,7 @@ def main():
     ap.add_argument('--token', default=os.getenv('MINERU_TOKEN', ''), help='MinerU API Token，默认读环境变量 MINERU_TOKEN')
     ap.add_argument('--subdirs', default=None, help='仅处理这些子目录，逗号分隔，例如 main,ref1,cited')
     ap.add_argument('--limit', type=int, default=None, help='最多处理的文件数（可选）')
+    ap.add_argument('--resume-batch', default=None, help='仅恢复指定 batch_id 的结果下载（依赖 task.json）')
     args = ap.parse_args()
 
     if not args.token:
@@ -259,7 +422,10 @@ def main():
         return
 
     subdirs = [s.strip() for s in args.subdirs.split(',')] if args.subdirs else None
-    convert_pdfs_to_md(args.teacher, args.pdf_root, args.md_root, args.token, subdirs=subdirs, limit=args.limit)
+    if args.resume_batch:
+        resume_with_batch(args.resume_batch, args.teacher, args.pdf_root, args.md_root, args.token)
+    else:
+        convert_pdfs_to_md(args.teacher, args.pdf_root, args.md_root, args.token, subdirs=subdirs, limit=args.limit)
 
 
 if __name__ == '__main__':

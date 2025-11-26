@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import concurrent.futures as futures
 import sys
 
 CUR_DIR = Path(__file__).resolve().parent
@@ -38,6 +39,7 @@ def main():
     ap.add_argument('--pdf-root', default=str(PROJ_ROOT / 'Downloads_pdf'), help='PDF 根目录（用于镜像到 DOI_source 风格），默认项目根下的 Downloads_pdf')
     ap.add_argument('--k', type=int, default=None, help='每个列表最多处理前 K 篇（可选，默认读取 config.ini [batch] k_per_list）')
     ap.add_argument('--no-related-downloads', action='store_true', help='仅索引相关文献，不下载其 PDF/元数据')
+    ap.add_argument('--workers-teachers', type=int, default=1, help='并发处理老师数量（默认 1 串行）')
     ap.add_argument('--verbose', action='store_true', help='详细输出')
     args = ap.parse_args()
 
@@ -60,18 +62,31 @@ def main():
 
     data_root = Path(args.data_root)
     pdf_root = Path(args.pdf_root)
-    client = InspireHEPClient()
     # 若未提供 --k，读取 config.ini 的默认值
     if args.k is None:
         args.k = get_default_k()
 
-    for teacher, items in plan.items():
-        if args.teacher and teacher != args.teacher:
-            continue
+    # 过滤仅处理指定老师
+    items_to_process = [
+        (t, items) for t, items in plan.items() if (not args.teacher or t == args.teacher)
+    ]
+
+    def _run_one(teacher: str, items: dict):
+        # 每个老师使用独立客户端，避免 requests.Session 跨线程共享
+        _client = InspireHEPClient()
         recents = items.get('recent', [])
         citeds = items.get('cited', [])
         print(f"\n=== 处理老师: {teacher} | recent={len(recents)} | cited={len(citeds)} ===")
-        download_for_teacher(client, teacher, recents, citeds, args.k, data_root, args.no_related_downloads, verbose=args.verbose, pdf_root=pdf_root)
+        download_for_teacher(_client, teacher, recents, citeds, args.k, data_root, args.no_related_downloads, verbose=args.verbose, pdf_root=pdf_root)
+
+    workers_teachers = max(1, int(args.workers_teachers or 1))
+    if workers_teachers == 1 or len(items_to_process) <= 1:
+        for teacher, items in items_to_process:
+            _run_one(teacher, items)
+    else:
+        # 并发处理多个老师
+        with futures.ThreadPoolExecutor(max_workers=workers_teachers) as pool:
+            list(pool.map(lambda pair: _run_one(pair[0], pair[1]), items_to_process))
 
     print('\n✓ 全部处理完成')
     return 0
