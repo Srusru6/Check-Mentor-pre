@@ -73,9 +73,14 @@ def extract_selected_from_zip(zip_path: Path, *, exts: list[str], prefix_with_zi
                     continue
                 # 输出文件名：默认采用成员的 basename；可选用 zip stem 前缀
                 member_name = Path(info.filename).name
-                out_name = member_name
-                if prefix_with_zip:
-                    out_name = f"{zip_path.stem}_{member_name}"
+                
+                if member_name == 'full.md':
+                    out_name = f"{zip_path.stem}.md"
+                else:
+                    out_name = member_name
+                    if prefix_with_zip:
+                        out_name = f"{zip_path.stem}_{member_name}"
+
                 out_path = zip_path.parent / out_name
                 if out_path.exists():
                     out_path = unique_path(out_path)
@@ -121,12 +126,35 @@ def scan_and_extract(data_root: Path, *, exts: list[str], remove_zip: bool, pref
     return total_pdf
 
 
+def clean_non_md_json(data_root: Path, dry_run: bool) -> None:
+    """清理 data_root 下除 .md 和 .json 以外的所有文件"""
+    print(f"\n开始清理非 .md/.json 文件 (Dry run: {dry_run})...")
+    allowed = {'.md', '.json'}
+    count = 0
+    # 遍历所有文件
+    for p in data_root.rglob('*'):
+        if p.is_file():
+            if p.suffix.lower() not in allowed:
+                if dry_run:
+                    print(f"  [Plan Delete] {p}")
+                else:
+                    try:
+                        p.unlink()
+                    except Exception as e:
+                        print(f"  [Error] 删除失败 {p}: {e}")
+                count += 1
+    
+    action = "预计删除" if dry_run else "已删除"
+    print(f"{action} {count} 个非 .md/.json 文件。")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="解压 data 目录的 ZIP，仅保留指定后缀（默认 md）")
-    ap.add_argument("--data-root", default=str(Path(__file__).resolve().parents[2] / "data"), help="待扫描的根目录（默认 ./data）")
+    ap.add_argument("--data-root", default=str(Path(__file__).resolve().parents[1] / "data"), help="待扫描的根目录（默认 ./data）")
     ap.add_argument("--only-ext", action="append", help="要保留的后缀（不含点），可多次指定；默认 md")
     ap.add_argument("--remove-zip", action="store_true", help="成功后删除 ZIP 文件")
     ap.add_argument("--prefix-with-zip-stem", action="store_true", help="重名时使用 ZIP 文件名作为前缀，降低冲突")
+    ap.add_argument("--clean-others", action="store_true", help="完成后删除除 .md 和 .json 以外的所有文件")
     ap.add_argument("--dry-run", action="store_true", help="仅打印操作计划，不写文件")
     args = ap.parse_args()
 
@@ -135,7 +163,13 @@ def main() -> int:
         print(f"目录不存在：{data_root}")
         return 2
     exts = args.only_ext if args.only_ext else ["md"]
-    return 0 if scan_and_extract(data_root, exts=exts, remove_zip=args.remove_zip, prefix_with_zip=args.prefix_with_zip_stem, dry_run=args.dry_run) >= 0 else 1
+    
+    ret = scan_and_extract(data_root, exts=exts, remove_zip=args.remove_zip, prefix_with_zip=args.prefix_with_zip_stem, dry_run=args.dry_run)
+    
+    if args.clean_others:
+        clean_non_md_json(data_root, args.dry_run)
+        
+    return 0 if ret >= 0 else 1
 
 
 if __name__ == "__main__":
