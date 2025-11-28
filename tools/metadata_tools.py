@@ -9,9 +9,13 @@
 """
 import json
 import argparse
+import sys
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any
+
+# Ensure core modules can be imported when running as a script
+sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from core.metadata_manager import MetadataManager, PaperMetadata
 
@@ -179,6 +183,94 @@ def generate_template(output_path: Path, paper_directory: Path = None):
     print(f"✓ 模板已生成: {output_path}")
 
 
+def merge_metadata_files(input_files: list[Path], output_file: Path):
+    """
+    合并多个元数据文件
+    
+    Args:
+        input_files: 输入文件路径列表
+        output_file: 输出文件路径
+    """
+    merged_items = []
+    seen_dois = set()
+    
+    print(f"正在合并 {len(input_files)} 个文件...")
+    
+    for file_path in input_files:
+        if not file_path.exists():
+            print(f"⚠️ 跳过不存在的文件: {file_path}")
+            continue
+            
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                
+            items = []
+            if isinstance(data, list):
+                items = data
+            elif isinstance(data, dict):
+                if "items" in data and isinstance(data["items"], list):
+                    items = data["items"]
+                else:
+                    # 判断是"旧格式(文件名->元数据)"还是"单条元数据"
+                    # 如果所有值都是字典，则认为是旧格式映射；否则认为是单条记录
+                    is_map_of_items = True
+                    if not data:
+                        is_map_of_items = False
+                    else:
+                        for v in data.values():
+                            if not isinstance(v, dict):
+                                is_map_of_items = False
+                                break
+                    
+                    if is_map_of_items:
+                        # 旧格式转换
+                        for filename, meta in data.items():
+                            item = meta.copy()
+                            # 如果没有 title，尝试从文件名获取
+                            if "title" not in item:
+                                item["title"] = Path(filename).stem
+                            items.append(item)
+                    else:
+                        # 单条记录格式
+                        item = data.copy()
+                        if "title" not in item:
+                            item["title"] = file_path.stem
+                        items.append(item)
+            
+            count = 0
+            for item in items:
+                # 简单的去重策略：基于 DOI
+                doi = item.get("doi")
+                if doi:
+                    # 规范化 DOI (简单去除空白)
+                    doi = doi.strip()
+                    if doi in seen_dois:
+                        continue
+                    seen_dois.add(doi)
+                
+                merged_items.append(item)
+                count += 1
+            
+            print(f"  + 从 {file_path.name} 添加了 {count} 条记录")
+            
+        except Exception as e:
+            print(f"❌ 处理文件 {file_path} 时出错: {e}")
+    
+    result = {"items": merged_items}
+    
+    try:
+        # 确保输出目录存在
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(output_file, 'w', encoding='utf-8') as f:
+            json.dump(result, f, ensure_ascii=False, indent=2)
+        print(f"✅ 合并完成! 结果已保存至: {output_file}")
+        print(f"   总记录数: {len(merged_items)}")
+    except Exception as e:
+        print(f"❌ 保存输出文件时出错: {e}")
+
+
 def show_statistics(file_path: Path):
     """显示元数据统计信息"""
     manager = MetadataManager()
@@ -306,6 +398,11 @@ def main():
     stats_parser = subparsers.add_parser('stats', help='显示元数据统计')
     stats_parser.add_argument('file', type=str, help='元数据文件路径')
     
+    # merge 命令
+    merge_parser = subparsers.add_parser('merge', help='合并多个元数据文件')
+    merge_parser.add_argument('inputs', nargs='+', help='输入文件路径列表')
+    merge_parser.add_argument('-o', '--output', required=True, help='输出文件路径')
+
     # test 命令
     test_parser = subparsers.add_parser('test', help='测试元数据功能')
     
@@ -335,6 +432,11 @@ def main():
         file_path = Path(args.file)
         print(f"📊 分析元数据文件: {file_path}\n")
         show_statistics(file_path)
+
+    elif args.command == 'merge':
+        input_files = [Path(p) for p in args.inputs]
+        output_file = Path(args.output)
+        merge_metadata_files(input_files, output_file)
     
     elif args.command == 'test':
         test_metadata_features()

@@ -82,7 +82,9 @@ python main.py meta-pack --teacher "曹庆宏" --dois "10.1103/PhysRevLett.116.0
 使用 MinerU 将下载的 PDF 转换为 Markdown 格式，以便 LLM 分析。
 
 ```powershell
-python main.py pdf2md --teacher "示例老师" --pdf-root .\Downloads_pdf --md-root .\data --subdirs main,ref1,cited --token "YOUR_MINERU_TOKEN"
+# 如果已在 .env 配置 MINERU_TOKEN，可省略 --token
+python main.py pdf2md --teacher "示例老师" --pdf-root .\Downloads_pdf --md-root .\data --subdirs main,ref1,cited
+```
 ```
 
 ### 4. 合并历史记录
@@ -95,7 +97,15 @@ python main.py merge-history --teacher "示例老师" --subdir ref1
 python main.py merge-history --teacher "示例老师" --subdir cited
 ```
 
-### 5. 运行分析
+### 5. 清理中间文件
+
+清理 `data/` 目录下的中间文件（如 .zip, .pdf, images 等），仅保留 `.md` 和 `history.json`，以节省空间并保持目录整洁。
+
+```powershell
+python main.py clean --target "示例老师"
+```
+
+### 6. 运行分析
 
 启动 LLM 工作流，生成最终报告。
 
@@ -107,9 +117,9 @@ python main.py analyze --target "示例老师"
 python main.py analyze --target "示例老师" --test-mode
 ```
 
-### 6. 一条龙运行 (Run All)
+### 7. 一条龙运行 (Run All)
 
-自动执行：PDF转MD -> 合并历史 -> 分析。
+自动执行：PDF转MD -> 合并历史 -> 清理中间文件 -> 分析。
 
 ```powershell
 python main.py run-all --target "示例老师" --token "YOUR_MINERU_TOKEN" --test-mode

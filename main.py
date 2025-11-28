@@ -116,9 +116,80 @@ def cmd_run_all(ns: argparse.Namespace) -> int:
         if r != 0:
             return r
 
-    # 3) 分析（直接使用 data/<teacher> 作为数据根）
-    print("[3/3] Running analysis...")
+    # 3) 清理中间文件（保留 MD 和 history.json）
+    print("[3/4] Cleaning intermediate files...")
+    cmd_clean(argparse.Namespace(target=teacher, data_root=md_root))
+
+    # 4) 分析（直接使用 data/<teacher> 作为数据根）
+    print("[4/4] Running analysis...")
     return cmd_analyze(argparse.Namespace(target=teacher, test_mode=ns.test_mode, data_root=str(Path(md_root) / teacher)))
+
+
+def cmd_clean(ns: argparse.Namespace) -> int:
+    import shutil
+    repo = Path(__file__).resolve().parent
+    teacher = ns.target
+    data_root = ns.data_root
+    if not data_root:
+        data_root = str(repo / 'data')
+    
+    base_dir = Path(data_root) / teacher
+    if not base_dir.exists():
+        print(f"Target directory not found: {base_dir}")
+        return 0
+
+    print(f"Cleaning intermediate files in {base_dir} (keeping .md and history.json)...")
+    
+    cleaned = 0
+    # 遍历 main, ref1, cited
+    for subdir in ['main', 'ref1', 'cited']:
+        d = base_dir / subdir
+        if not d.exists():
+            continue
+        
+        for p in d.iterdir():
+            if p.name == 'history.json':
+                continue
+            if p.suffix.lower() == '.md':
+                continue
+            
+            # 删除其他所有文件和文件夹(如 images, .zip, .json)
+            try:
+                if p.is_dir():
+                    shutil.rmtree(p)
+                else:
+                    p.unlink()
+                cleaned += 1
+            except Exception as e:
+                print(f"Error deleting {p}: {e}")
+    
+    print(f"Cleanup complete. Removed {cleaned} items.")
+    return 0
+
+
+def cmd_merge_json(ns: argparse.Namespace) -> int:
+    repo = Path(__file__).resolve().parent
+    script = repo / 'tools' / 'metadata_tools.py'
+    
+    input_path = Path(ns.input)
+    inputs = []
+    
+    if input_path.is_dir():
+        output_path = Path(ns.output).resolve()
+        print(f"Scanning JSON files in {input_path}...")
+        for f in input_path.glob("*.json"):
+            # 排除输出文件自身
+            if f.resolve() != output_path:
+                inputs.append(str(f))
+        if not inputs:
+            print(f"No JSON files found in {input_path}")
+            return 1
+        print(f"Found {len(inputs)} files.")
+    else:
+        inputs.append(str(input_path))
+        
+    argv = ['merge', *inputs, '-o', ns.output]
+    return _run_py(script, argv)
 
 
 def cmd_meta_pack(ns: argparse.Namespace) -> int:
@@ -187,7 +258,7 @@ def build_parser() -> argparse.ArgumentParser:
     pm.set_defaults(func=cmd_merge_history)
 
     # run-all
-    pr = sub.add_parser('run-all', help='一条龙：pdf2md -> merge-history -> analyze')
+    pr = sub.add_parser('run-all', help='一条龙：pdf2md -> merge-history -> clean -> analyze')
     pr.add_argument('--target', required=True, help='教师名称（目标教授）')
     pr.add_argument('--test-mode', action='store_true', help='测试模式，仅处理少量数据')
     pr.add_argument('--pdf-root', default=None, help='PDF 根目录（默认 ./Downloads_pdf）')
@@ -195,6 +266,18 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument('--token', default=None, help='MinerU API Token（默认读环境变量 MINERU_TOKEN）')
     pr.add_argument('--limit', type=int, default=None, help='最多处理的文件数')
     pr.set_defaults(func=cmd_run_all)
+
+    # clean
+    pc = sub.add_parser('clean', help='清理中间文件（仅保留 .md 和 history.json）')
+    pc.add_argument('--target', required=True, help='教师名称（目标教授）')
+    pc.add_argument('--data-root', default=None, help='数据根目录（默认 ./data）')
+    pc.set_defaults(func=cmd_clean)
+
+    # merge-json
+    pmj = sub.add_parser('merge-json', help='合并指定文件夹下的所有 JSON 元数据文件')
+    pmj.add_argument('input', help='输入文件夹路径')
+    pmj.add_argument('-o', '--output', required=True, help='输出文件路径')
+    pmj.set_defaults(func=cmd_merge_json)
 
     # meta-pack
     pm = sub.add_parser('meta-pack', help='基于 InspireHEP 生成数据布局（data/<teacher>/main|ref1|cited）')
