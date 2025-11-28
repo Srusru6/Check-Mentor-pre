@@ -73,3 +73,6 @@ venv.bak/
 *.zip
 *.json
 *.jpg
+
+# to_do文件
+to_do.txt

@@ -32,7 +32,7 @@ def cmd_analyze(ns: argparse.Namespace) -> int:
 
 def cmd_download(ns: argparse.Namespace) -> int:
     repo = Path(__file__).resolve().parent
-    script = repo / 'DOIdownloader' / 'download.py'
+    script = repo / 'DOI_source' / 'download.py'
     # 透传参数（保持与 download.py 对齐的常见选项子集）
     argv = []
     if ns.prod:
@@ -123,7 +123,7 @@ def cmd_run_all(ns: argparse.Namespace) -> int:
 
 def cmd_meta_pack(ns: argparse.Namespace) -> int:
     repo = Path(__file__).resolve().parent
-    script = repo / 'inspirehep_source' / 'inspirehep_downloader' / 'meta-data' / 'run_meta_pack.py'
+    script = repo / 'inspirehep_source' / 'meta-process' / 'run_meta_pack.py'
     argv = []
     if ns.mid_file:
         argv += ['--mid-file', ns.mid_file]
@@ -141,6 +141,8 @@ def cmd_meta_pack(ns: argparse.Namespace) -> int:
         argv.append('--no-related-downloads')
     if ns.verbose:
         argv.append('--verbose')
+    if ns.token:
+        argv += ['--token', ns.token]
     return _run_py(script, argv)
 
 
@@ -156,7 +158,7 @@ def build_parser() -> argparse.ArgumentParser:
     pa.set_defaults(func=cmd_analyze)
 
     # download
-    pd = sub.add_parser('download', help='从DOI下载PDF（封装 DOIdownloader/download.py）')
+    pd = sub.add_parser('download', help='从DOI下载PDF（封装 DOI_source/download.py）')
     pd.add_argument('--prod', action='store_true', help='生产模式输出')
     pd.add_argument('--doi', default=None, help='DOI 列表，逗号或空白分隔')
     pd.add_argument('--teacher', default=None, help='教师名称（输出目录名）')
@@ -169,7 +171,7 @@ def build_parser() -> argparse.ArgumentParser:
     pd.set_defaults(func=cmd_download)
 
     # pdf2md
-    pp = sub.add_parser('pdf2md', help='批量将 PDF 转换为 MD（封装 DOIdownloader/pdf2md.py）')
+    pp = sub.add_parser('pdf2md', help='批量将 PDF 转换为 MD（封装 tools/pdf2md/pdf2md.py）')
     pp.add_argument('--teacher', required=True, help='教师名称（输入/输出目录名）')
     pp.add_argument('--pdf-root', default=None, help='PDF 根目录（默认 ./Downloads_pdf）')
     pp.add_argument('--md-root', default=None, help='MD 根目录（默认 ./data）')
@@ -195,7 +197,7 @@ def build_parser() -> argparse.ArgumentParser:
     pr.set_defaults(func=cmd_run_all)
 
     # meta-pack
-    pm = sub.add_parser('meta-pack', help='基于 meta-data 脚本生成 DOI_source 风格的数据布局（data/<teacher>/main|ref1|cited）')
+    pm = sub.add_parser('meta-pack', help='基于 InspireHEP 生成数据布局（data/<teacher>/main|ref1|cited）')
     pm.add_argument('--mid-file', default=None, help='mid 文件路径（JSON 或文本块）')
     pm.add_argument('--teacher', default=None, help='仅处理该老师（可选）')
     pm.add_argument('--dois', default=None, help='逗号分隔的 DOI 列表（与 --teacher 一起使用）')
@@ -204,6 +206,7 @@ def build_parser() -> argparse.ArgumentParser:
     pm.add_argument('--k', type=int, default=None, help='每个列表最多处理前 K 篇（可选）')
     pm.add_argument('--no-related-downloads', action='store_true', help='仅索引相关文献，不下载其 PDF/元数据')
     pm.add_argument('--verbose', action='store_true', help='详细输出')
+    pm.add_argument('--token', default=None, help='MinerU API Token')
     pm.set_defaults(func=cmd_meta_pack)
 
     # download-inspire
@@ -216,6 +219,7 @@ def build_parser() -> argparse.ArgumentParser:
     pdi.add_argument('--k', type=int, default=None, help='每个列表最多处理前 K 篇（可选）')
     pdi.add_argument('--no-related-downloads', action='store_true', help='仅索引相关文献，不下载其 PDF/元数据')
     pdi.add_argument('--verbose', action='store_true', help='详细输出')
+    pdi.add_argument('--token', default=None, help='MinerU API Token')
     pdi.set_defaults(func=cmd_meta_pack)
 
     return p
