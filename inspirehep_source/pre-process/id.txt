@@ -1,17 +1,5 @@
 TARGETS = [
     {
-        "name": "Cao, Qing-Hong",
-        "id": "1034325",
-        "cn_name": "曹庆宏",
-        "strict_names": ["Qing-Hong, Cao"]
-    },
-    {
-        "name": "Zhu, HuaXing",
-        "id": "1061019",
-        "cn_name": "朱华星",
-        "strict_names": ["HuaXing, Zhu"]
-    },
-    {
         "name": "Feng, Xu",
         "id": "1040303",
         "cn_name": "冯旭",
@@ -36,10 +24,22 @@ TARGETS = [
         "strict_names": ["Yu-xin, Liu"]
     },
     {
+        "name": "Cao, Qing-Hong",
+        "id": "1034325",
+        "cn_name": "曹庆宏",
+        "strict_names": ["Qing-Hong, Cao"]
+    },
+    {
         "name": "Zhu, Shi-Lin",
         "id": "982063",
         "cn_name": "朱世琳",
         "strict_names": ["Shi-Lin, Zhu"]
+    },
+    {
+        "name": "Zhu, HuaXing",
+        "id": "1061019",
+        "cn_name": "朱华星",
+        "strict_names": ["HuaXing, Zhu"]
     },
     {
         "name": "Shu, Jing",
