@@ -1,0 +1,68 @@
+TARGETS = [
+    {
+        "name": "Cao, Qing-Hong",
+        "id": "1034325",
+        "cn_name": "曹庆宏",
+        "strict_names": ["Qing-Hong, Cao"]
+    },
+    {
+        "name": "Zhu, HuaXing",
+        "id": "1061019",
+        "cn_name": "朱华星",
+        "strict_names": ["HuaXing, Zhu"]
+    },
+    {
+        "name": "Feng, Xu",
+        "id": "1040303",
+        "cn_name": "冯旭",
+        "strict_names": ["Xu, Feng"]
+    },
+    {
+        "name": "Liu, Jia",
+        "id": "1336279",
+        "cn_name": "刘佳",
+        "strict_names": ["Jia, Liu"]
+    },
+    {
+        "name": "Liu, Chuan",
+        "id": "1000038",
+        "cn_name": "刘川",
+        "strict_names": ["Chuan, Liu"]
+    },
+    {
+        "name": "Liu, Yu-xin",
+        "id": "1029600",
+        "cn_name": "刘玉鑫",
+        "strict_names": ["Yu-xin, Liu"]
+    },
+    {
+        "name": "Zhu, Shi-Lin",
+        "id": "982063",
+        "cn_name": "朱世琳",
+        "strict_names": ["Shi-Lin, Zhu"]
+    },
+    {
+        "name": "Shu, Jing",
+        "id": "1019902",
+        "cn_name": "舒菁",
+        "strict_names": ["Jing, Shu"]
+    },
+    {
+        "name": "Ruan, Shan-Ming",
+        "id": "1780618",
+        "cn_name": "阮善明",
+        "strict_names": ["Shan-Ming, Ruan"]
+    },
+    {
+        "name": "Lei, Yi-An",
+        "id": "1026921",
+        "cn_name": "雷奕安",
+        "strict_names": ["Yi-An, Lei"]
+    },
+    {
+        "name": "Ma, Yan-Qing",
+        "id": "1056966",
+        "cn_name": "马滟青",
+        "strict_names": ["Yan-Qing, Ma"]
+    },
+]
