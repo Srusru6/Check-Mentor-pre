@@ -42,6 +42,12 @@ TARGETS = [
         "strict_names": ["HuaXing, Zhu"]
     },
     {
+        "name": "Wang, Yi-Nan",
+        "id": "1066122",
+        "cn_name": "王一男",
+        "strict_names": ["Yi-Nan, Wang"]
+    },
+    {
         "name": "Shu, Jing",
         "id": "1019902",
         "cn_name": "舒菁",

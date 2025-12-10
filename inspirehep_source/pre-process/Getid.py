@@ -19,13 +19,14 @@ except ImportError:
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 TEACHERS_PATH = os.path.join(CURRENT_DIR, "theory_teachers.txt")
+FINISHED_PATH = os.path.join(CURRENT_DIR, "finished_teachers.txt")
 OUTPUT_PATH = os.path.join(CURRENT_DIR, "id.txt")
 
 # InspireHEP API 配置
 BASE_URL = "https://inspirehep.net/api"
 MAX_RETRIES = 3
 REQUEST_TIMEOUT = 20
-SEARCH_SIZE = 30  # 搜索前 30 条结果
+SEARCH_SIZE = 100  # 搜索前 100 条结果
 
 # ================= 🛠️ 核心代码 =================
 
@@ -57,7 +58,7 @@ class TargetSearcher:
     
     def search_author(self, cn_name):
         """
-        搜索老师，返回前 30 条结果
+        搜索老师，返回前 100 条结果
         """
         print(f"[🔍] 搜索: {cn_name}...", end=" ")
         
@@ -281,6 +282,25 @@ class TargetSearcher:
             print(f"❌ 保存失败: {e}")
             return 0
 
+# 读取已有 id.txt 中的中文名，用于跳过已处理的老师
+def read_existing_cn_from_id(id_file):
+    existing = set()
+    if not os.path.exists(id_file):
+        return existing
+    try:
+        with open(id_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+        local_vars = {}
+        exec(content, {}, local_vars)
+        if 'TARGETS' in local_vars:
+            for item in local_vars['TARGETS']:
+                cn = item.get("cn_name")
+                if cn:
+                    existing.add(cn)
+    except Exception as e:
+        print(f"[⚠️] 读取 id.txt 失败，忽略已处理跳过: {e}")
+    return existing
+
 # ================= ▶️ 主程序 =================
 
 if __name__ == "__main__":
@@ -297,8 +317,18 @@ if __name__ == "__main__":
     if not teachers:
         print("❌ 无法读取老师列表，程序退出")
         exit(1)
+
+    # 1.1 读取已有 id.txt，跳过已处理老师
+    existing_cn = read_existing_cn_from_id(OUTPUT_PATH)
+    if existing_cn:
+        teachers = [t for t in teachers if t not in existing_cn]
+        print(f"[ℹ️] 已跳过 id.txt 中的老师 {len(existing_cn)} 位")
+
+    if not teachers:
+        print("✅ 所有老师均已存在 id.txt 中，程序退出")
+        exit(0)
     
-    print(f"[ℹ️] 成功读取 {len(teachers)} 位老师\n")
+    print(f"[ℹ️] 本次待处理 {len(teachers)} 位老师\n")
     print("-" * 60)
     
     # 2. 逐个搜索老师
