@@ -272,8 +272,8 @@ def parse_results_file(results_file):
                     teachers_info[current_teacher]["dois"].append(line_stripped)
             else:
                 # 这是教师名字
-                completed = line_stripped.startswith('*')
-                cn_name = line_stripped.lstrip('*').strip()
+                completed = line_stripped.endswith('+')
+                cn_name = line_stripped.rstrip('+').strip()
                 
                 current_teacher = cn_name
                 teachers_info[cn_name] = {
@@ -300,7 +300,7 @@ def get_processed_teachers(results_file):
                 # 检查是否是等号分隔行或 DOI
                 if line and not line.startswith('=') and not line.startswith('10.'):
                     # 移除可能的星号，这是中文姓名
-                    cn_name = line.lstrip('*').strip()
+                    cn_name = line.rstrip('+').strip()
                     processed.add(cn_name)
     except Exception as e:
         print(f"读取已处理教师列表失败: {e}")
@@ -322,9 +322,9 @@ def find_teacher_needing_supplement(results_file):
 
 def update_teacher_status_in_file(results_file, cn_name, mark_completed=True):
     """
-    在 results.txt 中给教师名字添加或移除星号
-    mark_completed=True: 添加星号
-    mark_completed=False: 移除星号
+    在 results.txt 中给教师名字添加或移除补充标记（尾部+）
+    mark_completed=True: 添加+
+    mark_completed=False: 移除+
     """
     if not os.path.exists(results_file):
         return
@@ -340,16 +340,16 @@ def update_teacher_status_in_file(results_file, cn_name, mark_completed=True):
             if not line_stripped or line_stripped.startswith('=') or line_stripped.startswith('10.'):
                 continue
             
-            # 获取不含星号的名字
-            current_name = line_stripped.lstrip('*').strip()
+            # 获取不含补充标记的名字
+            current_name = line_stripped.rstrip('+').strip()
             
             if current_name == cn_name:
-                if mark_completed and not line_stripped.startswith('*'):
-                    # 添加星号
-                    lines[idx] = '*' + current_name + '\n'
+                if mark_completed and not line_stripped.endswith('+'):
+                    # 添加补充标记（放在名字后）
+                    lines[idx] = current_name + '+\n'
                     modified = True
-                elif not mark_completed and line_stripped.startswith('*'):
-                    # 移除星号
+                elif not mark_completed and line_stripped.endswith('+'):
+                    # 移除补充标记
                     lines[idx] = current_name + '\n'
                     modified = True
                 break
@@ -558,7 +558,7 @@ if __name__ == "__main__":
                         phase1_dois_unique.append(doi)
                         phase1_seen.add(doi)
                 
-                # 写入第一阶段（不带星号，去重后）
+                # 写入第一阶段（不带标记，去重后）
                 f.write("=" * 50 + "\n")
                 f.write(f"{cn_name}\n")
                 f.write("=" * 50 + "\n")
@@ -566,11 +566,11 @@ if __name__ == "__main__":
                     f.write(f"{doi}\n")
                 f.write("\n")
                 
-                # 第二条目：补充阶段的结果（带星号）
+                # 第二条目：补充阶段的结果（名字后加+）
                 supplement_dois = [item['doi'] for item in cited_supplement]
                 
                 f.write("=" * 50 + "\n")
-                f.write(f"*{cn_name}\n")
+                f.write(f"{cn_name}+\n")
                 f.write("=" * 50 + "\n")
                 for doi in supplement_dois:
                     f.write(f"{doi}\n")
@@ -578,7 +578,7 @@ if __name__ == "__main__":
                 
                 print(f"✅ 添加完成！")
                 print(f"📂 第一阶段：{cn_name} 添加 {len(phase1_dois_unique)} 篇（期刊限制，已去重）")
-                print(f"📂 第二阶段：*{cn_name} 添加 {len(supplement_dois)} 篇（补充模式）")
+                print(f"📂 第二阶段：{cn_name}+ 添加 {len(supplement_dois)} 篇（补充模式）")
                 
             else:
                 # 无补充模式：只写一个条目（不带星号，去重后）
