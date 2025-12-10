@@ -34,6 +34,7 @@ TIMEOUT = 8      # 降低超时时间到 8 秒
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_DIR = CURRENT_DIR
 OUTPUT_PATH = os.path.join(OUTPUT_DIR, "results.txt")
+FINISHED_TEACHERS_PATH = os.path.join(OUTPUT_DIR, "finished_teachers.txt")
 
 # ================= 🛠️ 核心代码 =================
 
@@ -595,6 +596,14 @@ if __name__ == "__main__":
                 print(f"📂 已为 {cn_name} 添加 {len(all_dois_unique)} 篇论文（期刊限制，已去重）")
         
         print(f"📂 结果文件: {OUTPUT_PATH}")
+        
+        # 追加教师名到 finished_teachers.txt
+        try:
+            with open(FINISHED_TEACHERS_PATH, "a", encoding="utf-8") as f:
+                f.write(f"{cn_name}\n")
+            print(f"✅ 已将 {cn_name} 追加到 finished_teachers.txt")
+        except Exception as e:
+            print(f"⚠️ 写入 finished_teachers.txt 失败: {e}")
         
     except Exception as e:
         print(f"❌ 写入失败: {e}")
