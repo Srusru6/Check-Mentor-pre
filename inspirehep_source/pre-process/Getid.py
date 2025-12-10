@@ -247,10 +247,23 @@ class TargetSearcher:
     
     def save_targets(self, filtered_results, output_path):
         """
-        保存最终的 TARGETS 到 id.txt，包含中文名
+        追加保存最终的 TARGETS 到 id.txt，包含中文名
         """
-        targets = []
+        # 读取已有的 TARGETS
+        existing_targets = []
+        if os.path.exists(output_path):
+            try:
+                with open(output_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                local_vars = {}
+                exec(content, {}, local_vars)
+                if 'TARGETS' in local_vars:
+                    existing_targets = local_vars['TARGETS']
+            except Exception as e:
+                print(f"[⚠️] 读取现有 TARGETS 失败: {e}")
         
+        # 构建新的 targets
+        new_targets = []
         for cn_name in sorted(filtered_results.keys()):
             items = filtered_results[cn_name]
             for item in items:
@@ -260,11 +273,14 @@ class TargetSearcher:
                     "cn_name": cn_name,
                     "strict_names": item["strict_names"]
                 }
-                targets.append(target)
+                new_targets.append(target)
+        
+        # 合并 existing 和 new
+        all_targets = existing_targets + new_targets
         
         # 生成 Python 代码格式的 TARGETS
         targets_code = "TARGETS = [\n"
-        for target in targets:
+        for target in all_targets:
             targets_code += "    {\n"
             targets_code += f'        "name": "{target["name"]}",\n'
             targets_code += f'        "id": "{target["id"]}",\n'
@@ -276,8 +292,9 @@ class TargetSearcher:
         try:
             with open(output_path, 'w', encoding='utf-8') as f:
                 f.write(targets_code)
-            print(f"\n✅ 已保存 TARGETS 到: {output_path}")
-            return len(targets)
+            print(f"\n✅ 已追加保存 TARGETS 到: {output_path}")
+            print(f"   原有 {len(existing_targets)} 条，新增 {len(new_targets)} 条，共 {len(all_targets)} 条")
+            return len(new_targets)
         except Exception as e:
             print(f"❌ 保存失败: {e}")
             return 0
