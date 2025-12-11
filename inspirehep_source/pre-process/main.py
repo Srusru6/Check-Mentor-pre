@@ -121,83 +121,74 @@ class StableFetcher:
         
         return False
 
-    def fetch_paper_data_stable(self, target_config, identifier, sort_mode, 
-                                 allow_all_journals=False, existing_dois=None, target_limit=None):
+    def fetch_paper_data_dual(self, target_config, identifier, sort_mode, 
+                              target_limit_restricted=10, existing_dois=None):
         """
-        极稳健的分页下载：小批量 + 原地重试
+        同时收集限制期刊和非限制期刊的论文
         
-        参数:
-            target_config: 目标配置字典
-            identifier: 作者标识符
-            sort_mode: 排序模式 (mostrecent/mostcited)
-            allow_all_journals: 是否允许所有期刊（补充模式用，默认 False）
-            existing_dois: 已有 DOI 集合，用于去重（默认 None）
-            target_limit: 目标数量（默认使用LIMIT）
+        返回: (sort_mode, restricted_dois, unrestricted_dois)
         """
         name = target_config["name"]
         strict_names = target_config["strict_names"]
         tag = "最新" if sort_mode == "mostrecent" else "高引"
         
-        results = []
-        seen_dois = set()  # 本模式内去重
-        if existing_dois is None:
-            existing_dois = set()  # 防止 None
+        restricted_results = []  # 限制期刊
+        unrestricted_results = []  # 非限制期刊
+        seen_dois = set()  # 全局去重
         
-        if target_limit is None:
-            target_limit = LIMIT
+        if existing_dois is None:
+            existing_dois = set()
         
         page = 1
-        total_checked = 0  # 统计所有检索的文章总数
+        total_checked = 0
         
         base_params = {
-            "q": f"a {identifier}", 
+            "q": f"a {identifier}",
             "sort": sort_mode,
             "size": BATCH_SIZE
         }
         
-        mode_tag = "[补充]" if allow_all_journals else ""
-        print(f"\n   [⏳] {name} [{tag}]{mode_tag} 开始扫描 (目标 {target_limit} 篇)...", flush=True)
+        print(f"\n   [⏳] {name} [{tag}] 开始扫描 (限制期刊目标 {target_limit_restricted} 篇，同时收集所有非限制期刊，搜索上限 {MAX_PAGES} 页)...", flush=True)
         
-        # 循环直到凑够数量或翻页过多
-        while len(results) < target_limit:
+        # 循环直到达到搜索上限（不再提前停止）
+        while page <= MAX_PAGES:
             params = base_params.copy()
             params["page"] = page
             
-            # --- 原地重试逻辑 ---
+            # 原地重试逻辑
             success = False
             for attempt in range(MAX_RETRIES):
                 try:
                     res = self.session.get(f"{self.BASE_URL}/literature", params=params, timeout=TIMEOUT)
                     data = res.json()
                     success = True
-                    break # 成功则跳出重试循环
+                    break
                 except Exception as e:
                     print(f"      [⚠️] {name} Page {page} 失败 (尝试 {attempt+1}/{MAX_RETRIES}): {e}", flush=True)
-                    time.sleep(0.3) # 缩短等待时间
+                    time.sleep(0.3)
             
             if not success:
                 print(f"      [❌] {name} Page {page} 彻底失败，跳过此页", flush=True)
                 page += 1
-                continue # 放弃这一页，尝试下一页
+                continue
             
-            # --- 数据处理 ---
+            # 数据处理
             hits = data.get("hits", {}).get("hits", [])
-            if not hits: 
-                break # 没有更多数据了
+            if not hits:
+                print(f"      [ℹ️] {name} Page {page} 无更多数据，搜索完成", flush=True)
+                break
             
             for hit in hits:
-                if len(results) >= target_limit: break
-                
-                total_checked += 1  # 计数所有检索的文章
+                total_checked += 1
                 
                 metadata = hit.get("metadata", {})
                 authors_list = metadata.get("authors", [])
                 
                 # 1. 过滤大型合作组
-                if len(authors_list) > MAX_AUTHORS: 
+                if len(authors_list) > MAX_AUTHORS:
                     continue
                 
-                # 2. 严格名字匹配
+                # 2. 严格名字匹配（确保所有论文都经过严格审查）
                 if not self.check_exact_match(authors_list, strict_names):
                     continue
                 
@@ -208,32 +199,36 @@ class StableFetcher:
                 if not doi_val:
                     continue
                 
-                # 4. 期刊过滤 (仅在非补充模式下)
-                if not allow_all_journals:
-                    is_allowed_journal = any(journal in doi_val for journal in ALLOWED_JOURNALS)
-                    if not is_allowed_journal:
-                        continue
-                
-                # 5. 去重检查（本模式内 + 已有 DOI）
+                # 4. 去重检查（全局去重）
                 if doi_val in seen_dois or doi_val in existing_dois:
                     continue
                 
-                # 6. 添加结果
+                # 5. 判断期刊类型
+                is_allowed_journal = any(journal in doi_val for journal in ALLOWED_JOURNALS)
+                
+                # 6. 添加到对应列表
                 author_names = [a.get("full_name", "Unknown") for a in authors_list]
                 authors_str = "; ".join(author_names)
                 
-                results.append({
+                result_item = {
                     "doi": doi_val,
                     "authors": authors_str
-                })
+                }
+                
                 seen_dois.add(doi_val)
-                print(f"      ✓ [{tag}]{mode_tag} 第 {total_checked} 篇: {doi_val} (已保存 {len(results)}/{target_limit})", flush=True)
+                
+                if is_allowed_journal and len(restricted_results) < target_limit_restricted:
+                    restricted_results.append(result_item)
+                    print(f"      ✓ [{tag}] 限制期刊 第 {total_checked} 篇: {doi_val} (已保存 {len(restricted_results)}/{target_limit_restricted})", flush=True)
+                elif not is_allowed_journal:
+                    unrestricted_results.append(result_item)
+                    print(f"      ✓ [{tag}] 非限制期刊: {doi_val} (已保存 {len(unrestricted_results)})", flush=True)
             
             page += 1
-            if page > MAX_PAGES: break # 防止死循环
+        
+        print(f"      [⬇️] {name} [{tag}] 完成! 限制期刊 {len(restricted_results)} 条，非限制期刊 {len(unrestricted_results)} 条", flush=True)
+        return sort_mode, restricted_results, unrestricted_results
 
-        print(f"      [⬇️] {name} [{tag}]{mode_tag} 完成! 获取 {len(results)} 条", flush=True)
-        return sort_mode, results
 
 # ================= ▶️ 辅助函数 =================
 
@@ -426,102 +421,113 @@ if __name__ == "__main__":
         print(f"❌ 无法获取教师 {target['name']} 的标识符")
         exit(1)
     
-    # 5. 第一阶段：使用期刊限制下载（最新和高引各10篇）
-    print(f"\n⚡ 第一阶段：限制期刊下载（最新10篇 + 高引10篇）...\n")
+    # 5. 第一阶段：获取最新和高引（各限制期刊10篇 + 所有非限制期刊）
+    print(f"\n⚡ 第一阶段：获取限制期刊和非限制期刊论文...\n")
     
     final_data = {}
     final_data[target["name"]] = {}
     name = target["name"]
     cn_name = target.get("cn_name", name)
     
-    # 并发获取 mostrecent 和 mostcited，各10篇
+    # 并发获取 mostrecent 和 mostcited，同时收集限制和非限制期刊
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
         future_map = {}
         f1 = executor.submit(
-            fetcher.fetch_paper_data_stable,
+            fetcher.fetch_paper_data_dual,
             target, identifier, "mostrecent",
-            allow_all_journals=False,
-            existing_dois=None,
-            target_limit=10  # 最新10篇
+            target_limit_restricted=10,
+            existing_dois=None
         )
         future_map[f1] = "mostrecent"
         
         f2 = executor.submit(
-            fetcher.fetch_paper_data_stable,
+            fetcher.fetch_paper_data_dual,
             target, identifier, "mostcited",
-            allow_all_journals=False,
-            existing_dois=None,
-            target_limit=10  # 高引10篇
+            target_limit_restricted=10,
+            existing_dois=None
         )
         future_map[f2] = "mostcited"
         
         for future in concurrent.futures.as_completed(future_map):
             mode = future_map[future]
             try:
-                _, data_list = future.result()
-                final_data[name][mode] = data_list
+                _, restricted_list, unrestricted_list = future.result()
+                final_data[name][mode] = {
+                    "restricted": restricted_list,
+                    "unrestricted": unrestricted_list
+                }
             except Exception as e:
                 print(f"任务异常: {e}")
-                final_data[name][mode] = []
+                final_data[name][mode] = {
+                    "restricted": [],
+                    "unrestricted": []
+                }
     
-    # 6. 合并第一阶段的 DOI 并进行去重
-    all_dois = []
-    all_dois_unique = []  # 去重后的 DOI
-    seen_dois_set = set()
+    # 6. 合并并去重限制期刊 DOI
+    restricted_dois = []
+    restricted_dois_unique = []
+    restricted_seen = set()
     
-    recents = final_data[name].get("mostrecent", [])
-    cited = final_data[name].get("mostcited", [])
+    unrestricted_dois = []  # 收集所有非限制期刊 DOI
+    unrestricted_seen = set()
     
-    for item in recents:
+    # 处理 mostrecent 的限制期刊
+    recents = final_data[name].get("mostrecent", {})
+    for item in recents.get("restricted", []):
         doi = item['doi']
-        all_dois.append(doi)
-        if doi not in seen_dois_set:
-            all_dois_unique.append(doi)
-            seen_dois_set.add(doi)
+        restricted_dois.append(doi)
+        if doi not in restricted_seen:
+            restricted_dois_unique.append(doi)
+            restricted_seen.add(doi)
     
-    for item in cited:
+    # 处理 mostcited 的限制期刊
+    cited = final_data[name].get("mostcited", {})
+    for item in cited.get("restricted", []):
         doi = item['doi']
-        all_dois.append(doi)
-        if doi not in seen_dois_set:
-            all_dois_unique.append(doi)
-            seen_dois_set.add(doi)
+        restricted_dois.append(doi)
+        if doi not in restricted_seen:
+            restricted_dois_unique.append(doi)
+            restricted_seen.add(doi)
     
-    # 检查是否有重复
-    if len(all_dois_unique) < len(all_dois):
-        print(f"\n⚠️ 第一阶段发现重复 DOI：收集 {len(all_dois)} 篇，去重后 {len(all_dois_unique)} 篇")
+    # 收集所有非限制期刊 DOI（从 mostrecent 和 mostcited）
+    for item in recents.get("unrestricted", []):
+        doi = item['doi']
+        if doi not in unrestricted_seen:
+            unrestricted_dois.append(doi)
+            unrestricted_seen.add(doi)
+    
+    for item in cited.get("unrestricted", []):
+        doi = item['doi']
+        if doi not in unrestricted_seen:
+            unrestricted_dois.append(doi)
+            unrestricted_seen.add(doi)
+    
+    # 检查限制期刊是否有重复
+    if len(restricted_dois_unique) < len(restricted_dois):
+        print(f"\n⚠️ 限制期刊发现重复 DOI：收集 {len(restricted_dois)} 篇，去重后 {len(restricted_dois_unique)} 篇")
     
     supplement_mode = False
     cited_supplement = []  # 初始化补充数据
     
-    # 如果去重后不足 20 篇，启动补充模式
-    if len(all_dois_unique) < 20:
+    # 如果限制期刊不足 20 篇，启动补充模式（仅在高引限制期刊中补充）
+    if len(restricted_dois_unique) < 20:
         supplement_mode = True
-        existing_dois = set(all_dois_unique)
-        needed = 20 - len(all_dois_unique)
+        existing_restricted_dois = set(restricted_dois_unique)
+        needed = 20 - len(restricted_dois_unique)
         
-        print(f"\n⚠️ 去重后仅获取 {len(all_dois_unique)} 篇，不足 20 篇")
-        print(f"🔄 启动补充模式：无期刊限制，仅从高引补充 {needed} 篇...\n")
+        print(f"\n⚠️ 限制期刊仅获取 {len(restricted_dois_unique)} 篇，不足 20 篇")
+        print(f"🔄 启动补充模式：从高引限制期刊补充 {needed} 篇...\n")
         
-        # 第二阶段：无期刊限制，仅从 mostcited 补充
-        _, cited_supplement = fetcher.fetch_paper_data_stable(
+        # 第二阶段：仅从 mostcited 的限制期刊补充
+        _, cited_restricted, _ = fetcher.fetch_paper_data_dual(
             target, identifier, "mostcited",
-            allow_all_journals=True,
-            existing_dois=existing_dois,
-            target_limit=needed
+            target_limit_restricted=needed,
+            existing_dois=existing_restricted_dois
         )
+        cited_supplement = cited_restricted
         
-        # 追加到 mostcited 数据
-        final_data[name]["mostcited"].extend(cited_supplement)
-        
-        # 重新合并所有 DOI
-        all_dois = []
-        recents = final_data[name].get("mostrecent", [])
-        cited = final_data[name].get("mostcited", [])
-        
-        for item in recents:
-            all_dois.append(item['doi'])
-        for item in cited:
-            all_dois.append(item['doi'])
+        # 追加到限制期刊数据
+        restricted_dois_unique.extend([item['doi'] for item in cited_supplement])
     
     # 7. 写入文件
     print(f"\n{'='*60}")
@@ -530,70 +536,35 @@ if __name__ == "__main__":
     
     try:
         with open(OUTPUT_PATH, "a", encoding="utf-8") as f:
+            # 第一条目：限制期刊 DOI（不带加号）
+            f.write("=" * 50 + "\n")
+            f.write(f"{cn_name}\n")
+            f.write("=" * 50 + "\n")
+            
+            # 输出限制期刊的 DOI，最多 20 篇
+            output_restricted = restricted_dois_unique[:20]
+            for doi in output_restricted:
+                f.write(f"{doi}\n")
+            f.write("\n")
+            
+            print(f"✅ 第一条目完成！")
+            print(f"📂 限制期刊：{cn_name} 添加 {len(output_restricted)} 篇论文")
+            
             if supplement_mode:
-                # 补充模式：分两个条目写入
-                
-                # 第一条目：第一阶段的结果（不带星号，去重后）
-                phase1_dois_unique = []
-                phase1_seen = set()
-                
-                recents = final_data[name].get("mostrecent", [])
-                cited_phase1 = final_data[name].get("mostcited", [])
-                
-                # 只取第一阶段的数据（需要区分第一阶段和补充阶段）
-                # 通过长度判断：mostrecent 都是第一阶段，mostcited 可能混合
-                for item in recents:
-                    doi = item['doi']
-                    if doi not in phase1_seen:
-                        phase1_dois_unique.append(doi)
-                        phase1_seen.add(doi)
-                
-                # mostcited 中，前 len(all_dois_before_supplement) 是第一阶段
-                all_dois_before_supplement_count = len(all_dois_unique)
-                recents_count = len(recents)
-                cited_phase1_count = all_dois_before_supplement_count - recents_count
-                
-                for i, item in enumerate(cited_phase1[:cited_phase1_count]):
-                    doi = item['doi']
-                    if doi not in phase1_seen:
-                        phase1_dois_unique.append(doi)
-                        phase1_seen.add(doi)
-                
-                # 写入第一阶段（不带标记，去重后）
-                f.write("=" * 50 + "\n")
-                f.write(f"{cn_name}\n")
-                f.write("=" * 50 + "\n")
-                for doi in phase1_dois_unique:
-                    f.write(f"{doi}\n")
-                f.write("\n")
-                
-                # 第二条目：补充阶段的结果（名字后加+）
-                supplement_dois = [item['doi'] for item in cited_supplement]
-                
+                print(f"📂 补充模式已使用：从高引限制期刊补充 {len(cited_supplement)} 篇")
+            
+            # 第二条目：非限制期刊 DOI（名字后加+）
+            if unrestricted_dois:
                 f.write("=" * 50 + "\n")
                 f.write(f"{cn_name}+\n")
                 f.write("=" * 50 + "\n")
-                for doi in supplement_dois:
+                
+                for doi in unrestricted_dois:
                     f.write(f"{doi}\n")
                 f.write("\n")
                 
-                print(f"✅ 添加完成！")
-                print(f"📂 第一阶段：{cn_name} 添加 {len(phase1_dois_unique)} 篇（期刊限制，已去重）")
-                print(f"📂 第二阶段：{cn_name}+ 添加 {len(supplement_dois)} 篇（补充模式）")
-                
-            else:
-                # 无补充模式：只写一个条目（不带星号，去重后）
-                f.write("=" * 50 + "\n")
-                f.write(f"{cn_name}\n")
-                f.write("=" * 50 + "\n")
-                
-                # 输出去重后的 DOI
-                for doi in all_dois_unique[:20]:  # 只取前20个
-                    f.write(f"{doi}\n")
-                f.write("\n")
-                
-                print(f"✅ 添加完成！")
-                print(f"📂 已为 {cn_name} 添加 {len(all_dois_unique)} 篇论文（期刊限制，已去重）")
+                print(f"📂 第二条目完成！")
+                print(f"📂 非限制期刊：{cn_name}+ 添加 {len(unrestricted_dois)} 篇论文")
         
         print(f"📂 结果文件: {OUTPUT_PATH}")
         
