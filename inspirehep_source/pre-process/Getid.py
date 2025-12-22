@@ -3,6 +3,7 @@ import requests
 import json
 import time
 import re
+import configparser
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from pathlib import Path
@@ -18,6 +19,7 @@ except ImportError:
 # ================= ⚙️ 配置区域 =================
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+CONFIG_PATH = os.path.abspath(os.path.join(CURRENT_DIR, "..", "..", "config.ini"))
 TEACHERS_PATH = os.path.join(CURRENT_DIR, "theory_teachers.txt")
 FINISHED_PATH = os.path.join(CURRENT_DIR, "finished_teachers.txt")
 OUTPUT_PATH = os.path.join(CURRENT_DIR, "id.txt")
@@ -27,6 +29,37 @@ BASE_URL = "https://inspirehep.net/api"
 MAX_RETRIES = 3
 REQUEST_TIMEOUT = 20
 SEARCH_SIZE = 100  # 搜索前 100 条结果
+
+
+def load_preprocess_config():
+    """从 config.ini 读取预处理参数，缺失时使用默认值。"""
+    parser = configparser.ConfigParser()
+    if os.path.exists(CONFIG_PATH):
+        try:
+            parser.read(CONFIG_PATH, encoding="utf-8")
+        except Exception:
+            pass
+    if not parser.has_section("preprocess"):
+        return {}
+    section = parser["preprocess"]
+
+    def _get_int(key, default):
+        try:
+            return int(section.get(key, fallback=default))
+        except Exception:
+            return default
+
+    return {
+        "author_search_size": _get_int("author_search_size", SEARCH_SIZE),
+        "author_search_timeout": _get_int("author_search_timeout", REQUEST_TIMEOUT),
+        "author_search_retries": _get_int("author_search_retries", MAX_RETRIES),
+    }
+
+
+_cfg = load_preprocess_config()
+SEARCH_SIZE = _cfg.get("author_search_size", SEARCH_SIZE)
+REQUEST_TIMEOUT = _cfg.get("author_search_timeout", REQUEST_TIMEOUT)
+MAX_RETRIES = _cfg.get("author_search_retries", MAX_RETRIES)
 
 # ================= 🛠️ 核心代码 =================
 

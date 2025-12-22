@@ -1,0 +1,27 @@
+杨志成：
+https://www.x-mol.com/paper/search/q?selectSearchType=0&option=Zhi-Cheng+Yang
+"strict_names": ["Zhi-Cheng, Yang"]
+
+黄华卿: 
+https://www.x-mol.com/paper/search/q?selectSearchType=0&option=Huaqing+Huang
+"strict_names": ["Huaqing, Huang"]
+
+宋慧超: 
+https://www.x-mol.com/paper/search/q?selectSearchType=0&option=Huichao+Song
+"strict_names": ["Huichao, Song"]
+
+朱守华: 
+https://www.x-mol.com/paper/search/q?selectSearchType=0&option=Shou-Hua+Zhu
+"strict_names": ["Shou-Hua, Zhu"]
+
+张大新: 
+https://www.x-mol.com/paper/search/q?selectSearchType=0&option=Da-Xin+Zhang
+"strict_names": ["Da-Xin, Zhang"]
+
+李定平: 
+https://www.x-mol.com/paper/search/q?selectSearchType=0&option=Dingping+Li
+"strict_names": ["Dingping, Li"]
+
+马伯强: 
+https://www.x-mol.com/paper/search/q?selectSearchType=0&option=Bo-Qiang+Ma
+"strict_names": ["Bo-Qiang, Ma"]

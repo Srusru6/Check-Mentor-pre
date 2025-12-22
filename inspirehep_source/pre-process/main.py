@@ -2,6 +2,7 @@ import os
 import requests
 import concurrent.futures
 import time
+import configparser
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -17,14 +18,17 @@ TARGETS = [
     },
 ]
 
-# 2. 数量限制
+CONFIG_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "config.ini"))
+
+# 2. 数量限制（默认值，可在 config.ini 的 [preprocess] 中覆盖）
 LIMIT = 10       
 MAX_AUTHORS = 10 # 过滤掉作者数超过 10 人的文章
 
 # 2.5 期刊限制
 ALLOWED_JOURNALS = ["PhysRevD", "PhysRevLett", "Nature", "Science"]  # 只收集 PRD/PRL/Nature/Science 的论文
+TARGET_LIMIT_RESTRICTED = 10  # mostrecent/mostcited 各自的限制期刊目标
 
-# 3. 网络请求配置 (优化版)
+# 3. 网络请求配置 (默认值，可被 config.ini 覆盖)
 BATCH_SIZE = 50  # 每次抓 50 篇，大幅提高下载速度
 MAX_RETRIES = 2  # 单页失败重试次数
 MAX_PAGES = 30   # 最多翻 30 页
@@ -35,6 +39,52 @@ CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_DIR = CURRENT_DIR
 OUTPUT_PATH = os.path.join(OUTPUT_DIR, "results.txt")
 FINISHED_TEACHERS_PATH = os.path.join(OUTPUT_DIR, "finished_teachers.txt")
+
+
+def load_preprocess_config():
+    """从 config.ini 读取预处理参数，缺失时使用默认值。"""
+    parser = configparser.ConfigParser()
+    if os.path.exists(CONFIG_PATH):
+        try:
+            parser.read(CONFIG_PATH, encoding="utf-8")
+        except Exception:
+            pass
+    if not parser.has_section("preprocess"):
+        return {}
+    section = parser["preprocess"]
+
+    def _get_int(key, default):
+        try:
+            return int(section.get(key, fallback=default))
+        except Exception:
+            return default
+
+    def _get_list(key, default):
+        raw = section.get(key)
+        if raw is None:
+            return default
+        return [item.strip() for item in raw.split(',') if item.strip()]
+
+    return {
+        "batch_size": _get_int("batch_size", BATCH_SIZE),
+        "max_retries": _get_int("max_retries", MAX_RETRIES),
+        "max_pages": _get_int("max_pages", MAX_PAGES),
+        "timeout": _get_int("timeout", TIMEOUT),
+        "max_authors": _get_int("max_authors", MAX_AUTHORS),
+        "allowed_journals": _get_list("allowed_journals", ALLOWED_JOURNALS),
+        "restricted_target_per_sort": _get_int("restricted_target_per_sort", TARGET_LIMIT_RESTRICTED),
+    }
+
+
+# 读取配置并覆盖默认值
+_cfg = load_preprocess_config()
+BATCH_SIZE = _cfg.get("batch_size", BATCH_SIZE)
+MAX_RETRIES = _cfg.get("max_retries", MAX_RETRIES)
+MAX_PAGES = _cfg.get("max_pages", MAX_PAGES)
+TIMEOUT = _cfg.get("timeout", TIMEOUT)
+MAX_AUTHORS = _cfg.get("max_authors", MAX_AUTHORS)
+ALLOWED_JOURNALS = _cfg.get("allowed_journals", ALLOWED_JOURNALS)
+TARGET_LIMIT_RESTRICTED = _cfg.get("restricted_target_per_sort", TARGET_LIMIT_RESTRICTED)
 
 # ================= 🛠️ 核心代码 =================
 
@@ -122,7 +172,7 @@ class StableFetcher:
         return False
 
     def fetch_paper_data_dual(self, target_config, identifier, sort_mode, 
-                              target_limit_restricted=10, existing_dois=None):
+                              target_limit_restricted=None, existing_dois=None):
         """
         同时收集限制期刊和非限制期刊的论文
         
@@ -135,6 +185,9 @@ class StableFetcher:
         restricted_results = []  # 限制期刊
         unrestricted_results = []  # 非限制期刊
         seen_dois = set()  # 全局去重
+
+        if target_limit_restricted is None:
+            target_limit_restricted = TARGET_LIMIT_RESTRICTED
         
         if existing_dois is None:
             existing_dois = set()
@@ -435,7 +488,7 @@ if __name__ == "__main__":
         f1 = executor.submit(
             fetcher.fetch_paper_data_dual,
             target, identifier, "mostrecent",
-            target_limit_restricted=10,
+            target_limit_restricted=TARGET_LIMIT_RESTRICTED,
             existing_dois=None
         )
         future_map[f1] = "mostrecent"
@@ -443,7 +496,7 @@ if __name__ == "__main__":
         f2 = executor.submit(
             fetcher.fetch_paper_data_dual,
             target, identifier, "mostcited",
-            target_limit_restricted=10,
+            target_limit_restricted=TARGET_LIMIT_RESTRICTED,
             existing_dois=None
         )
         future_map[f2] = "mostcited"
