@@ -23,6 +23,11 @@ prd/prl/nature/science的论文放在正常名称后，其他论文放在加号�
 杨志成 黄华卿 宋慧超 朱守华
 张大新 李定平 马伯强
 
+
+
+
+
+
 待完成的量材所老师：
 陈钢 陈剑豪 陈一 陈昱安
 崔琦 杜瑞瑞 冯济 高鹏
@@ -38,16 +43,14 @@ prd/prl/nature/science的论文放在正常名称后，其他论文放在加号�
 廖志敏 方哲宇 李新征 李源
 马仁敏
 
-Physical Review Letters 
-Nano Letters 
-Physical Review B 
-Advanced Materials
-Proceedings of the National Academy of Sciences 
-Nature/Science
-Surface Science Reports
-Progress in Surface Science
-J. Chem. Phys.
-Accounts of Chemical Research
+Quantum 模块运作流程与技术细节汇总：
+1. 获取待处理导师名单：从 tot_teachers 文件中提取目标导师姓名，以此作为任务索引，并实时比对已完成与未完成名单，确保流程不遗漏。
+2. 多维身份确权逻辑：为从根源解决同名同姓干扰（如江颖、谢心澄等），建立“精准 ID 库”与“机构强效验证”机制。系统首先读取内置的 OpenAlex Author ID 进行秒级锁定；若无 ID，则通过 API 检索“姓名+北京大学（PKU）”关联标签，确认为本人后再行抓取。
+3. 学术库深度检索机制：利用 OpenAlex 全量 API 替代传统的 Google Scholar 网页爬虫。根据锁定的作者识别码，直接进入其官方个人学术主页记录，检索其学术生涯中的全部已知 DOI 产出。
+4. 量子/物理领域智能筛选：对论文标题与刊名进行语义分析，严格锁定物理（Physics）、量子（Quantum）、材料（Materials）、纳米（Nano）等核心方向；通过内置黑名单机制，实时剔除生物（Biology）、生物医药（Cancer/Clinical）、农业（Agro）等异向干扰论文。
+5. 刊物分级与排序策略：优先提取 PRL、Nature/Science 正刊及子刊、Advanced Materials 等顶级论文填入“20 篇精选”；补充 PRB、Nano Letters、PNAS、JCP 等物理化学领域权威论文作为加号栏内容；强制过滤评论文（Commentary）、新闻（News）及订正（Correction）等干扰方向。
+6. API 翻页与全文聚合机制：采用 API 循环分页算法（每页 100 篇），自动迭代执行翻页抓取，直至获取导师影响力最高的前 300 篇论文，并对原始数据进行去重、标准化描述处理，最终生成 results.txt。
+
 
 
 
