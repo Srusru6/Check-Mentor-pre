@@ -1,0 +1,101 @@
+陈钢：
+"strict_names": ["Gang,Chen", "G.,Chen"]
+
+陈剑豪：
+"strict_names": ["Jianhao,Chen", "Jian-Hao,Chen", "J.-H.,Chen"]
+
+陈一：
+"strict_names": ["Yi,Chen", "Y.,Chen"]
+
+陈昱安：
+"strict_names": ["Yu-An,Chen", "Y. -A.,Chen"]
+
+崔琦：
+"strict_names": ["Daniel C.,Tsui", "D. C.,Tsui", "Daniel,Tsui", "D.,Tsui"]
+
+杜瑞瑞：
+"strict_names": ["Rui-Rui,Du", "R. R.,Du"]
+
+冯济：
+"strict_names": ["Ji,Feng"]
+
+高鹏：
+"strict_names": ["Peng,Gao"]
+
+贾爽：
+"strict_names": ["Shuang,Jia", "S.,Jia"]
+
+江颖：
+"strict_names": ["Ying,Jiang", "Y.,Jiang"]
+
+栗佳：
+"strict_names": ["Jia,Li", "J.,Li"]
+
+林熙：
+"strict_names": ["Xi,Lin"]
+
+刘雄军：( Xiong-Jun Liu)
+"strict_names": ["Xiongjun,Liu", "Xiong-Jun,Liu"]
+
+刘阳：
+"strict_names": ["Yang,Liu", "Y.,Liu"]
+
+卢晓波：
+"strict_names": ["Xiaobo,Lu", "X. B.,Lu", "X. -B.,Lu"]
+
+彭莹莹：
+"strict_names": ["Yingying,Peng", "Y. Y.,Peng"]
+
+施均仁：
+"strict_names": ["Junren,Shi", "J.,Shi"]
+
+进藤龙一：
+"strict_names": ["Ryuichi,Shindou", "R.,Shindou"]
+
+宋志达：
+"strict_names": ["Zhi-Da,Song", "Zhida,Song", "Z. -D.,Song", "Z.,Song"]
+
+孙栋：
+"strict_names": ["Dong,Sun", "D.,Sun"]
+
+孙庆丰：
+"strict_names": ["Qing-feng,Sun", "Qing-Feng,Sun", "Q. F.,Sun", "Q.-F.,Sun"]
+
+檀时钠：
+"strict_names": ["Shina,Tan", "S.,Tan"]
+
+王恩哥：
+"strict_names": ["Enge,Wang", "E. G.,Wang", "E.-G.,Wang"]
+
+王垡：
+"strict_names": ["Fa,Wang", "F.,Wang"]
+
+王国庆：
+"strict_names": ["Guoqing,Wang", "G.,Wang"]
+
+王健：
+"strict_names": ["Jian,Wang", "J.,Wang"]
+
+王捷：
+"strict_names": ["Jie,Wang", "J.,Wang"]
+
+王楠林：
+"strict_names": ["Nanlin,Wang", "Nan-Lin,Wang", "N. L.,Wang", "N.-L.,Wang"]
+
+吴飙：
+"strict_names": ["Biao,Wu", "B.,Wu", "B. -L.,Wu", "B.-L.,Wu"]
+
+谢心澄：
+"strict_names": ["Xincheng,Xie", "Xin-Cheng,Xie", "X. C.,Xie", "X.-C.,Xie", "X.,C.,Xie"]
+
+徐丽梅：
+"strict_names": ["Limei,Xu", "L.,Xu", "L. M.,Xu"]
+
+张熙博：
+"strict_names": ["Xibo,Zhang", "X.,Zhang", "X. B.,Zhang"]
+
+张焱：
+"strict_names": ["Yan,Zhang", "Y.,Zhang"]
+
+张亿：
+"strict_names": ["Yi,Zhang"]
