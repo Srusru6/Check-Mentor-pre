@@ -1,0 +1,167 @@
+﻿欧阳颀：
+"strict_names": ["Qi Ouyang", "Q. Ouyang"]
+
+俞大鹏：
+"strict_names": ["Dapeng Yu", "D. P. Yu"]
+
+汤超：
+"strict_names": ["Chao Tang", "C. Tang"]
+
+沈波：
+"strict_names": ["Bo Shen", "B. Shen"]
+
+王新强：
+"strict_names": ["Xinqiang Wang", "X. Q. Wang"]
+
+戴伦：
+"strict_names": ["Lun Dai", "L. Dai"]
+
+廖志敏：
+"strict_names": ["Zhimin Liao", "Z. M. Liao"]
+
+全海涛：
+"strict_names": ["Haitao Quan", "H. T. Quan"]
+
+刘开辉：
+"strict_names": ["Kaihui Liu", "K. H. Liu"]
+
+李新征：
+"strict_names": ["Xinzheng Li", "X. Z. Li"]
+
+冉广照：
+"strict_names": ["Guangzhao Ran", "G. Z. Ran"]
+
+史俊杰：
+"strict_names": ["Junjie Shi", "J. J. Shi"]
+
+王宏利：
+"strict_names": ["Hongli Wang", "H. L. Wang"]
+
+尹澜：
+"strict_names": ["Lan Yin", "L. Yin"]
+
+杨金波：
+"strict_names": ["Jinbo Yang", "J. B. Yang"]
+
+于彤军：
+"strict_names": ["Tongjun Yu", "T. J. Yu"]
+
+陈志忠：
+"strict_names": ["Zhizhong Chen", "Z. Z. Chen"]
+
+赵清：
+"strict_names": ["Qing Zhao", "Q. Zhao"]
+
+罗春雄：
+"strict_names": ["Chunxiong Luo", "C. X. Luo"]
+
+吕劲：
+"strict_names": ["Jin Lu", "J. Lu"]
+
+吴孝松：
+"strict_names": ["Xiaosong Wu", "X. S. Wu"]
+
+方哲宇：
+"strict_names": ["Zheyu Fang", "Z. Y. Fang"]
+
+唐宁：
+"strict_names": ["Ning Tang", "N. Tang"]
+
+马仁敏：
+"strict_names": ["Renmin Ma", "R. M. Ma"]
+
+毛有东：
+"strict_names": ["Youdong Mao", "Y. D. Mao"]
+
+叶堉：
+"strict_names": ["Yu Ye", "Y. Ye"]
+
+陈基：
+"strict_names": ["Ji Chen", "J. Chen"]
+
+罗昭初：
+"strict_names": ["Zhaochu Luo", "Z. C. Luo"]
+
+杨学林：
+"strict_names": ["Xuelin Yang", "X. L. Yang"]
+
+鞠光旭：
+"strict_names": ["Guangxu Ju", "G. X. Ju"]
+
+王平：
+"strict_names": ["Ping Wang", "P. Wang"]
+
+赵宏政：
+"strict_names": ["Hongzheng Zhao", "H. Z. Zhao"]
+
+王丁：
+"strict_names": ["Ding Wang", "D. Wang"]
+
+洪浩：
+"strict_names": ["Hao Hong", "H. Hong"]
+
+杜红林：
+"strict_names": ["Honglin Du", "H. L. Du"]
+
+侯玉敏：
+"strict_names": ["Yumin Hou", "Y. M. Hou"]
+
+马平：
+"strict_names": ["Ping Ma", "P. Ma"]
+
+韩景智：
+"strict_names": ["Jingzhi Han", "J. Z. Han"]
+
+钱志新：
+"strict_names": ["Zhixin Qian", "Z. X. Qian"]
+
+童玉珍：
+"strict_names": ["Yuzhen Tong", "Y. Z. Tong"]
+
+王常生：
+"strict_names": ["Changsheng Wang", "C. S. Wang"]
+
+李方廷：
+"strict_names": ["Fangting Li", "F. T. Li"]
+
+王永忠：
+"strict_names": ["Yongzhong Wang", "Y. Z. Wang"]
+
+杨志坚：
+"strict_names": ["Zhijian Yang", "Z. J. Yang"]
+
+林峰：
+"strict_names": ["Feng Lin", "F. Lin"]
+
+康香宁：
+"strict_names": ["Xiangning Kang", "X. N. Kang"]
+
+吴洁君：
+"strict_names": ["Jiejun Wu", "J. J. Wu"]
+
+许福军：
+"strict_names": ["Fujun Xu", "F. J. Xu"]
+
+王越：
+"strict_names": ["Yue Wang", "Y. Wang"]
+
+刘顺荃：
+"strict_names": ["Shunquan Liu", "S. Q. Liu"]
+
+陈伟华：
+"strict_names": ["Weihua Chen", "W. H. Chen"]
+
+林芳：
+"strict_names": ["Fang Lin", "F. Lin"]
+
+李艳平：
+"strict_names": ["Yanping Li", "Y. P. Li"]
+
+张焱：
+"strict_names": ["Yan Zhang", "Y. Zhang"]
+
+杨文云：
+"strict_names": ["Wenyun Yang", "W. Y. Yang"]
+
+徐庆：
+"strict_names": ["Qing Xu", "Q. Xu"]
