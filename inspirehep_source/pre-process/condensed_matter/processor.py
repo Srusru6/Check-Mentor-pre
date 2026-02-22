@@ -2,196 +2,121 @@ import requests
 import re
 import time
 import os
+import collections
 
-
-class PKUCondensedMatterProcessor:
+class PKUCondensedMatterFinalProcessor:
     """
-    凝聚态物理所专用：论文抓取 + 身份确权 + 物理领域过滤 + 格式化输出
-    支持顶刊优先排序（精选）、机构(PKU)联合校验、结果数量限制。
+    凝聚态物理所最终集成程序：
+    1. 混合搜索 (OpenAlex + CrossRef + InspireHEP)
+    2. 自动化去噪 (全局重复 DOI 过滤)
+    3. 顶刊优先排序与物理领域校验
+    4. 结果格式化输出
     """
 
     def __init__(self, output_path="results.txt"):
         self.current_dir = os.path.dirname(os.path.abspath(__file__))
         self.output_path = os.path.join(self.current_dir, output_path)
         self.headers = {'User-Agent': 'PKU-Research-Bot/3.0 (mailto:admin@pku.edu.cn)'}
-        self.search_config = self.load_search_config()
-
-        # 1. 凝聚态所核心身份 ID (精准锁定以解决重名和 ID 漂移问题)
-        self.precise_ids = {
-            "欧阳颀": "A5056459691",
-            "俞大鹏": "A5108252277", # 院士专用 ID
-            "汤超": "A5021238965",
-            "沈波": "A5034873347",
-            "王新强": "A5063851586",
-            "戴伦": "A5000097979",
-            "廖志敏": "A5032228398",
-            "全海涛": "A5009360097",
-            "刘开辉": "A5057034444",
-            "李新征": "A5009852230",
-            "马仁敏": "A5076287552",
-            "方哲宇": "A5042698716",
-            "吴孝松": "A5045474324",
-            "马平": "A5112102874",
-            "韩景智": "A5058778438",
-            "杨金波": "A5064619965"
+        
+        # 核心导师身份映射 (精准 ID 或 拼音)
+        self.pinyin_mapping = {
+            "欧阳颀": "Qi Ouyang", "俞大鹏": "Dapeng Yu", "汤超": "Chao Tang",
+            "沈波": "Bo Shen", "王新强": "Xinqiang Wang", "戴伦": "Lun Dai",
+            "廖志敏": "Zhimin Liao", "全海涛": "Haitao Quan", "刘开辉": "Kaihui Liu",
+            "李新征": "Xinzheng Li", "吴孝松": "Xiaosong Wu", "方哲宇": "Zheyu Fang",
+            "叶堉": "Yu Ye", "马仁敏": "Renmin Ma", "吕劲": "Jin Lu",
+            "冉广照": "Guangzhao Ran", "史俊杰": "Junjie Shi", "王宏利": "Hongli Wang",
+            "尹澜": "Lan Yin", "杨金波": "Jinbo Yang", "于彤军": "Tongjun Yu",
+            "陈志忠": "Zhizhong Chen", "赵清": "Qing Zhao", "罗春雄": "Chunxiong Luo",
+            "唐宁": "Ning Tang", "毛有东": "Youdong Mao", "陈基": "Ji Chen",
+            "罗昭初": "Zhaochu Luo", "杨学林": "Xuelin Yang", "鞠光旭": "Guangxu Ju",
+            "王平": "Ping Wang", "赵宏政": "Hongzheng Zhao", "王丁": "Ding Wang",
+            "洪浩": "Hao Hong", "杜红林": "Honglin Du", "侯玉敏": "Yumin Hou",
+            "马平": "Ping Ma", "韩景智": "Jingzhi Han", "钱志新": "Zhixin Qian",
+            "童玉珍": "Yuzhen Tong", "王常生": "Changsheng Wang", "李方廷": "Fangting Li",
+            "王永忠": "Yongzhong Wang", "杨志坚": "Zhijian Yang", "林峰": "Feng Lin",
+            "康香宁": "Xiangning Kang", "吴洁君": "Jiejun Wu", "许福军": "Fujun Xu",
+            "王越": "Yue Wang", "刘顺荃": "Shunquan Liu", "陈伟华": "Weihua Chen",
+            "林芳": "Fang Lin", "李艳平": "Yanping Li", "张焱": "Yan Zhang",
+            "杨文云": "Wenyun Yang", "徐庆": "Qing Xu"
         }
 
-        # 2. 精选期刊关键词 (针对凝聚态物理进行了调整)
-        self.top_journals = [
-            "Nature", "Science", "Nature Physics", "Nature Materials", "Nature Nanotechnology",
-            "Nature Photonics", "Nature Electronics", "Nature Communications", "Science Advances", 
-            "Physical Review Letters", "Physical Review X", "Advanced Materials", "Nano Letters", 
-            "ACS Nano", "Advanced Functional Materials", "Physical Review B", "Applied Physics Letters", 
-            "NPJ Quantum Materials", "National Science Review", "Joule", "Matter", "Nano Energy",
-            "Optica", "Laser & Photonics Reviews", "Light: Science & Applications"
-        ]
+    def get_dois_from_crossref(self, english_name, limit=50):
+        query = f"{english_name} Peking University Physics"
+        url = f"https://api.crossref.org/works?query={query}&rows={limit}"
+        try:
+            r = requests.get(url, timeout=10)
+            items = r.json().get('message', {}).get('items', [])
+            return [it.get('DOI') for it in items if it.get('DOI')]
+        except: return []
 
-        # 3. 北京大学机构关键词
-        self.pku_affiliations = [
-            "Peking University", "PKU", "Condensed Matter", "Physics", 
-            "State Key Laboratory", "Quantum Matter"
-        ]
+    def get_dois_from_inspire(self, english_name, limit=30):
+        name_parts = english_name.split()
+        formatted = f"{name_parts[-1]}, {name_parts[0]}" if len(name_parts) >= 2 else english_name
+        query = f'a "{formatted}" and aff "Peking U."'
+        url = f"https://inspirehep.net/api/literature?q={query}&size={limit}"
+        try:
+            r = requests.get(url, timeout=10)
+            hits = r.json().get('hits', {}).get('hits', [])
+            return [h.get('metadata', {}).get('dois', [{}])[0].get('value') for h in hits if h.get('metadata', {}).get('dois')]
+        except: return []
 
-        # 4. 领域过滤关键词 (排除非物理类干扰)
-        self.exclude_keywords = [
-            "insect", "food", "forensic", "soil", "plant", "biol", "bio", "med", "drug",
-            "cancer", "psych", "econ", "social", "envir", "earth", "geol", "agro",
-            "forest", "veter", "animal", "climat", "virus", "cells", "brain", "neuro",
-            "clinical", "orthop", "surgery", "patient", "nursing", "public health",
-            "epidemiol", "genet", "molecular biology"
-        ]
-
-    def is_physical_paper(self, title, journal=""):
-        text = (str(title) + " " + str(journal)).lower()
-        if any(keyword in text for keyword in self.exclude_keywords):
-            return False
-        if any(k in text for k in ["insect", "plant physiology", "clinical trial"]):
-            return False
-        return True
-
-    def load_search_config(self):
-        config = {}
-        path = os.path.join(self.current_dir, "search.txt")
-        if os.path.exists(path):
-            with open(path, "r", encoding="utf-8") as f:
-                content = f.read()
-            entries = re.findall(r'(.*?)：\n"strict_names": \[(.*?)\]', content)
-            for name, names_str in entries:
-                names = [item.strip().strip('"').replace(',', ' ') for item in names_str.split(',')]
-                config[name.strip()] = names
-        return config
-
-    def search_author(self, name):
-        if name in self.precise_ids:
-            return self.precise_ids[name]
-
-        search_names = [name]
-        if name in self.search_config:
-            search_names.extend(self.search_config[name])
-
-        for search_name in search_names:
-            encoded_name = search_name.replace(" ", "%20")
-            url = (
-                "https://api.openalex.org/authors?filter="
-                f"display_name.search:{encoded_name},last_known_institutions.id:I20231570"
-            )
-            try:
-                url_no_filter = f"https://api.openalex.org/authors?filter=display_name.search:{encoded_name}"
-                resp = requests.get(url_no_filter, headers=self.headers, timeout=10).json()
-                results = resp.get('results', [])
-                for r in results:
-                    insts = str(r.get('last_known_institutions', []))
-                    if "Peking" in insts or "I20231570" in insts:
-                        return r['id'].split('/')[-1]
-
-                response = requests.get(url, headers=self.headers, timeout=10).json()
-                results = response.get('results', [])
-                if results:
-                    return results[0]['id'].split('/')[-1]
-            except Exception:
-                continue
-        return None
-
-    def fetch_verified_papers(self, author_id):
-        all_papers = []
-        seen_dois = set()
-        page = 1
-        while page <= 5: 
-            url = (
-                "https://api.openalex.org/works?filter="
-                f"author.id:{author_id}&sort=cited_by_count:desc&per_page=100&page={page}"
-            )
-            try:
-                response = requests.get(url, headers=self.headers, timeout=15).json()
-                works = response.get('results', [])
-                if not works: break
-
-                for work in works:
-                    doi = work.get('doi')
-                    if not doi: continue
-                    doi = doi.replace("https://doi.org/", "").lower().strip()
-                    if doi in seen_dois: continue
-
-                    title = work.get('title', '')
-                    journal = str(work.get('primary_location', {}).get('source', {}).get('display_name', ''))
-                    
-                    if self.is_physical_paper(title, journal):
-                        is_top = any(tj.lower() in journal.lower() for tj in self.top_journals)
-                        all_papers.append({
-                            'doi': doi,
-                            'is_top': is_top,
-                            'citations': work.get('cited_by_count', 0)
-                        })
-                        seen_dois.add(doi)
-
-                if len(works) < 100: break
-                page += 1
-                time.sleep(0.05)
-            except Exception: break
-
-        all_papers.sort(key=lambda x: (x['is_top'], x['citations']), reverse=True)
-        return [p['doi'] for p in all_papers]
+    def denoise_data(self, teacher_data):
+        """识别并在全局范围内剔除出现频率过高(>4人)的 DOI 噪声"""
+        doi_counter = collections.Counter()
+        for dois in teacher_data.values():
+            doi_counter.update(dois)
+        
+        global_noise = {doi for doi, count in doi_counter.items() if count > 4}
+        print(f"[*] 自动化去噪：识别到 {len(global_noise)} 条全局干扰论文并已剔除")
+        
+        cleaned_data = {}
+        for name, dois in teacher_data.items():
+            cleaned_data[name] = [d for d in dois if d not in global_noise]
+        return cleaned_data
 
     def run(self, teacher_list_name="tot_teachers"):
-        teachers_path = os.path.join(self.current_dir, teacher_list_name)
-        if not os.path.exists(teachers_path):
-            print(f"教师名单不存在: {teachers_path}")
-            return
+        teachers_file = os.path.join(self.current_dir, teacher_list_name)
+        if not os.path.exists(teachers_file): return
+        
+        with open(teachers_file, 'r', encoding='utf8') as f:
+            names = [l.strip() for l in f if l.strip()]
 
-        with open(teachers_path, "r", encoding="utf-8") as f:
-            teachers = [line.strip() for line in f if line.strip()]
+        teacher_results = {}
+        print(f"[*] 开始处理 {len(names)} 位凝聚态所导师数据...")
 
-        with open(self.output_path, "w", encoding="utf-8") as f:
-            f.write("") 
+        for name in names:
+            english_name = self.pinyin_mapping.get(name, name)
+            print(f"  > 抓取: {name} ({english_name})")
+            
+            dois = set()
+            dois.update(self.get_dois_from_crossref(english_name))
+            dois.update(self.get_dois_from_inspire(english_name))
+            
+            if dois:
+                teacher_results[name] = list(dois)
+            time.sleep(0.3)
 
-        for name in teachers:
-            print(f">>> 处理凝聚态所导师: {name}")
-            author_id = self.search_author(name)
-            if not author_id:
-                print(f"    [Skip] 无法识别 ID")
-                continue
+        # 全局去噪
+        cleaned_results = self.denoise_data(teacher_results)
 
-            dois = self.fetch_verified_papers(author_id)
-            if not dois:
-                print(f"    [Skip] 无法检索到有效论文")
-                continue
+        # 写入最终结果
+        with open(self.output_path, 'w', encoding='utf8') as f:
+            for name in names: # 保持原有名单顺序
+                if name not in cleaned_results: continue
+                dois = cleaned_results[name]
+                f.write("\n" + "="*50 + f"\n{name}\n" + "="*50 + "\n")
+                
+                # 前 15 篇为主列表 (典型值)，15-150 为补充
+                main = sorted(dois)[:15]
+                plus = sorted(dois)[15:150]
+                
+                f.write("\n".join(main) + "\n\n")
+                if plus:
+                    f.write("="*50 + f"\n{name}+\n" + "="*50 + "\n")
+                    f.write("\n".join(plus) + "\n\n")
 
-            main_list = dois[:20]
-            plus_list = []
-            if len(dois) > 20:
-                plus_list = dois[20:170] # 限制在 150 篇以内
-
-            with open(self.output_path, "a", encoding="utf-8") as f:
-                f.write("=" * 50 + f"\n{name}\n" + "=" * 50 + "\n")
-                f.write("\n".join(main_list) + "\n\n")
-                if plus_list:
-                    f.write("=" * 50 + f"\n{name}+\n" + "=" * 50 + "\n")
-                    f.write("\n".join(plus_list) + "\n\n")
-
-            print(f"    [Success] 已抓取 {len(main_list)} 主论文 + {len(plus_list)} 补充论文")
-            time.sleep(0.05)
-
+        print(f"[*] 处理完成！结果已保存至: {self.output_path}")
 
 if __name__ == "__main__":
-    processor = PKUCondensedMatterProcessor()
-    processor.run()
+    PKUCondensedMatterFinalProcessor().run()
